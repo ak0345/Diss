@@ -2,6 +2,8 @@ import random
 
 class Player:
     def __init__(self, name):
+        self.vp = 0
+        self.longest_road = 0
         types_of_resources = 4
         self.name = name
         self.tag = name+str(random.randint(1, 6))
@@ -31,4 +33,7 @@ class Player:
 
         self.del_from_inv(my_items)
         self.add_2_inv(p_items)
+
+    def inc_vp(self):
+        self.vp += 1
 

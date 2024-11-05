@@ -9,7 +9,7 @@ class HexBlock:
             self.n = n
             self.links = None
             self.value = None
-            self.struct_id = None
+            self.struct = None
         
         def set_links(self, links):
             self.links = links
@@ -19,9 +19,9 @@ class HexBlock:
         
         def set_value(self, value):
             self.value = value
-        
-        def set_struct_id(self, struct_id):
-            self.struct_id = struct_id
+
+        def set_struct(self, struct):
+            self.struct = struct
 
 
     def __init__(self, x, y):

@@ -1,10 +1,10 @@
 from enum import Enum
 
 class Resource(Enum):
-    WOOD = 'wood'
-    BRICK = 'brick'
-    SHEEP = 'sheep'
-    WHEAT = 'wheat'
+    WOOD = 0
+    BRICK = 1
+    SHEEP = 2
+    WHEAT = 3
 
 class Biome(Enum):
     FOREST = Resource.WOOD
@@ -17,7 +17,7 @@ class Structure(Enum):
     ROAD = [1, 1, 0, 0]
     SETTLEMENT = [1, 1, 1, 1]
 
-class HexEnum(Enum):
+class HexCompEnum(Enum):
     S1 = 0
     S2 = 1
     S3 = 2
