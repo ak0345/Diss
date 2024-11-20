@@ -20,12 +20,15 @@ This repository contains the code and research for my dissertation project on AI
 ## Getting Started
 
 ### Prerequisites
+
 - Python 3.x
 - Required libraries can be installed via:
   ```bash
   pip install -r requirements.txt
   ```
+
 ### Running the Project
+
 - To run the mini-Catan simulation:
   ```bash
   python mini_catan/main.py
@@ -34,7 +37,9 @@ This repository contains the code and research for my dissertation project on AI
   ```bash
   python full_catan/main.py
   ```
+
 ## Goals
+
 - Effective AI for Non-Deterministic Gameplay: Design AI strategies that perform well despite the unpredictability inherent in Catan.
 - Strategic Comparisons: Evaluate how the model measures up against established Catan-playing AIs.
 - Impact of Rule Changes: Understand how AI adapts to new rules and what this reveals about strategy flexibility.

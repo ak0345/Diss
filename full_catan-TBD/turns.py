@@ -187,7 +187,7 @@ while game:
             elif build_check != "n":
                 print("Invalid input. Please enter 'y' to build or 'n' to stop building.")
 
-        if p.vp == win_vp:
+        if p.vp >= win_vp:
             print(f"Player {p.name} has won")
             game = False
             break
