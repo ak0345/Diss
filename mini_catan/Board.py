@@ -70,24 +70,6 @@ class Board:
         self.robber_loc = i
 
     def longest_road_queue(self, p):
-        def hn_name(hn):
-            match hn:
-                case (0,1):
-                    return "h1"
-                case (-1,0):
-                    return "h2"
-                case (1,1):
-                    return "h3"
-                case (0,0):
-                    return "h4"
-                case (-1,-1):
-                    return "h5"
-                case (1,0):
-                    return "h6"
-                case (0,-1):
-                    return "h7"
-                case _:
-                    return "woowoo"
                 
         other_player_tags = [p_.tag for p_ in self.players if p_.tag != p.tag]
 
@@ -112,102 +94,110 @@ class Board:
                 if edge.links:
                     for link in edge.links:
                         if link:
-                            ns = [link.n]#, (link.n - 1)  % len(link.parent.sides), (link.n + 1) % len(link.parent.sides)]
-                            for n in ns:
-                                side_2_add_2 = link.parent.sides[n]
-                                if side_2_add_2 not in visited_set and side_2_add_2.value == p.tag:
+                            n = link.n
+                            side_2_add_2 = link.parent.sides[n]
+                            if side_2_add_2 not in visited_set and side_2_add_2.value == p.tag:
+                                visited.appendleft(side_2_add_2)
+                                visited_set.add(side_2_add_2)
+                                if side_2_add_2.links:
+                                    visited_set.add(side_2_add_2.links)
+                            elif side_2_add_2 not in visited_set and side_2_add_2.value in other_player_tags:
+                                if link.parent.check_nearby(HexCompEnum(side_2_add_2.n), Structure.ROAD, self.players[1], self.turn_number):
                                     visited.appendleft(side_2_add_2)
                                     visited_set.add(side_2_add_2)
                                     if side_2_add_2.links:
                                         visited_set.add(side_2_add_2.links)
-                                elif side_2_add_2 not in visited_set and side_2_add_2.value in other_player_tags:
-                                    if link.parent.check_nearby(HexCompEnum(side_2_add_2.n), Structure.ROAD, self.players[1], self.turn_number):
-                                        visited.appendleft(side_2_add_2)
-                                        visited_set.add(side_2_add_2)
-                                        if side_2_add_2.links:
-                                            visited_set.add(side_2_add_2.links)
 
-        for v in visited:
-            print(hn_name(v.parent.coords), f"S{v.n + 1}", "--- NO" if v.value == self.players[1].tag else "" )
+        #for v in visited:
+            #print(hn_name(v.parent.coords), f"S{v.n + 1}", "--- NOT MY ROAD" if v.value == self.players[1].tag else "" )
 
         return visited
     
     def longest_road(self, p):
-        def hn_name(hn):
-            match hn:
-                case (0,1):
-                    return "h1"
-                case (-1,0):
-                    return "h2"
-                case (1,1):
-                    return "h3"
-                case (0,0):
-                    return "h4"
-                case (-1,-1):
-                    return "h5"
-                case (1,0):
-                    return "h6"
-                case (0,-1):
-                    return "h7"
-                case _:
-                    return "woowoo"
-                
+        other_player_tags = [p_.tag for p_ in self.players if p_.tag != p.tag]
+        visited = set()
+
+        def is_negated(path, p, other_player_tags):
+            def check_adjacent_sides(side):
+                edge_i = side.n
+                adjacent_sides = [
+                    side.parent.sides[edge_i],
+                    side.parent.sides[(edge_i - 1) % len(side.parent.sides)],
+                    side.parent.sides[(edge_i + 1) % len(side.parent.sides)],
+                ]
+                count_p_tag = sum(1 for s in adjacent_sides if s.value == p.tag)
+                count_other_tag = sum(1 for s in adjacent_sides if s.value in other_player_tags)
+                return count_p_tag == 2 and count_other_tag == 1
+
+            for side in path:
+                if check_adjacent_sides(side):
+                    return True
+                for link in side.parent.edges[side.n].links:
+                    if link and check_adjacent_sides(link):
+                        return True
+            return False
+
         def is_connected(side1, side2):
-            """
-            Determines if two road segments (hex1, side1) and (hex2, side2) are connected.
-            Modify this function based on the game board logic.
-            """
-            #if side1.parent == side2.parent:
-                #if side1.n + 1 == side2.n or side1.n - 1 == side2.n:
-                    #return True
-            
-            i = side1.n
-            (self.sides[(i+1) % len(self.sides)] == side2 or 
-            self.sides[(i-1) % len(self.sides)] == side2)
-            
-            # Example logic: If sides are direct neighbors or linked via the same road
-            #return True  # Replace with actual logic
+            """Check if two sides are directly connected."""
+            if side1.parent == side2.parent:
+                # Direct neighbors within the same hex
+                if abs(side1.n - side2.n) in {1, len(side1.parent.sides) - 1}:
+                    return True
 
+            # Check connections via linked edges
+            for link in side1.parent.edges[side1.n].links:
+                if link and (link == side2 or link.parent.sides[(link.n - 1) % len(link.parent.sides)] == side2):
+                    return True
 
-        def is_negated(segment, path):
-            """
-            Determines if a segment invalidates a path (e.g., another player's road blocks it).
-            Modify this logic based on game rules.
-            """
-            # Example: If a segment belongs to another player and links with this path
-            return False  # Replace with actual logic
+            return False
 
-        queue = self.longest_road_queue(p)
-        paths = []  # List to store distinct paths (each path is a list of road segments)
+        def find_path(start_side):
+            """Find all connected sides forming a single road."""
+            path = []
+            stack = [start_side]
 
-        for segment in queue:
-            side = segment
+            while stack:
+                side = stack.pop()
+                if side in visited or side.value != p.tag:
+                    continue
 
-            # Flag to check if the segment was added to an existing path
-            added_to_path = False
+                visited.add(side)
+                if len(path) > 0:
+                    if path[-1].links != side:
+                        path.append(side)
+                else:
+                    path.append(side)
 
-            for path in paths:
-                # Check if this segment connects to the last segment in the path
-                last_side = path[-1]
-                if is_connected(last_side, side):  # You define is_connected logic
-                    path.append(side)  # Add to this path
-                    added_to_path = True
-                    break
+                # Add all connected sides to the stack
+                for neighbor in side.parent.sides:
+                    if neighbor not in visited and is_connected(side, neighbor):
+                        stack.append(neighbor)
+                
+                if side.links:
+                    for neighbor in side.links.parent.sides:
+                        if neighbor not in visited and is_connected(side, neighbor):
+                            stack.append(neighbor)
 
-            # If not added to any path, start a new path
-            if not added_to_path:
-                paths.append([side])
+            return path
 
-        # Post-processing: Remove negated paths if necessary
+        # Identify distinct paths
+        paths = []
+        for side in self.longest_road_queue(p):
+            if side not in visited and side.value == p.tag:
+                paths.append(find_path(side))
+
+        # Validate paths
         valid_paths = []
         for path in paths:
-            if not any(is_negated(segment, path) for segment in path):  # Define is_negated logic
+            if not is_negated(path, p, other_player_tags):
                 valid_paths.append(path)
 
-        for i, path in enumerate(valid_paths):
-            print(f"Path {i + 1}: {[(hn_name(p.parent.coords), f"S{p.n + 1}") for p in path]}")
+        # Output results
+        #for i, path in enumerate(valid_paths):
+            #print(f"Path {i + 1}: {[(hn_name(p.parent.coords), f'S{p.n + 1}') for p in path]}")
 
-        return 0
+        return max([len(path) for path in valid_paths])
+
     
     def place_struct(self, p, hn, pos, struct):
         if p.cost_check(struct):
@@ -218,16 +208,15 @@ class Board:
                         p.inc_vp()
                     elif struct == Structure.ROAD:
                         longest = self.longest_road(p)
-                        print(longest)
                         p.longest_road = longest
                         if longest >= self.min_longest_road:  # Minimum 5 roads required for "Longest Road"
                             if longest > self.current_longest_road:
                                     if self.longest_road_owner is not None:
                                         self.longest_road_owner.dec_vp()
-                                        print(f"{self.longest_road_owner.name} lost a vp")
+                                        #print(f"{self.longest_road_owner.name} lost a vp")
                                     self.longest_road_owner = p
                                     self.longest_road_owner.inc_vp()
-                                    print(f"{self.longest_road_owner.name} gained a vp")
+                                    #print(f"{self.longest_road_owner.name} gained a vp")
                                     self.current_longest_road = longest
                                     print(f"Player {p.name} now has the Longest Road: {longest}")
                     return True
@@ -265,13 +254,6 @@ class Board:
         h5 = self.h5.values()
         h6 = self.h6.values()
         h7 = self.h7.values()
-
-        """for h in [self.h1, self.h2, self.h3, self.h4, self.h5, self.h6, self.h7]:
-            print(f"Hex ({h.x}, {h.y}):")
-            for i, side in enumerate(h.sides):
-                linked_hex = side.links.parent if side.links else None
-                linked_side = side.links.n if side.links else None
-                print(f"  Side {i} links to Hex ({linked_hex.x if linked_hex else "None"}, {linked_hex.y if linked_hex else "None"}), Side {linked_side}")"""
 
         return[h1, h2, h3, h4, h5, h6, h7]
     

@@ -121,7 +121,6 @@ class HexBlock:
                 if self.sides[i_check].links:
                     link = self.sides[i_check].links
                     i_n = link.n
-                    print(f"{link.parent.coords}, S{i_n + 1}")
                     neighbor = neighbor or (link.parent.edges[i_n % len(self.edges)].value == p.tag or 
                         link.parent.edges[(i_n + 1) % len(self.edges)].value == p.tag or
                         link.parent.sides[(i_n - 1) % len(self.sides)].value is not None or
