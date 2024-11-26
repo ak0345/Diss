@@ -30,3 +30,7 @@ class HexCompEnum(Enum):
     E4 = 9
     E5 = 10
     E6 = 11
+    def __add__(self, n):
+        members = list(self.__class__)
+        new_index = (self.value + n) % len(members)
+        return members[new_index]

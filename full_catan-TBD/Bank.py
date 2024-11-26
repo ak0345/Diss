@@ -1,6 +1,6 @@
 class Bank:
     def __init__(self, resource_count):
-        self.name = "Bank"
+        self.name = "bank"
         types_of_resources = 4
         self.inventory = [resource_count] * types_of_resources
 

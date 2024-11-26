@@ -9,12 +9,14 @@ class Player:
         self.tag = name+str(random.randint(1, 6))
         #inventory = number of [Wood, Brick, Sheep, Wheat]
         self.inventory = [0] * types_of_resources
+        self.longest_road = 0
 
     def cost_check(self, struct):
         check = [a - b for a, b in zip(self.inventory, struct.value)]
         for c in check:
             if c < 0:
-                return False 
+                return False
+        
         return True
 
     def build_struct(self, struct):
@@ -27,13 +29,22 @@ class Player:
         self.inventory = [a - b for a, b in zip(self.inventory, items)]
 
     def trade_I_with_p(self, p, my_items, p_items):
-        #items = [W_n, B_n, S_n, W_n]
-        p.del_from_inv(p_items)
-        p.add_2_inv(my_items)
+        # Check if both parties have the necessary items for the trade
+        if all(my <= inv for my, inv in zip(my_items, self.inventory)) and \
+        all(pi <= inv for pi, inv in zip(p_items, p.inventory)):
+            # Perform the trade
+            p.del_from_inv(p_items)
+            p.add_2_inv(my_items)
 
-        self.del_from_inv(my_items)
-        self.add_2_inv(p_items)
+            self.del_from_inv(my_items)
+            self.add_2_inv(p_items)
+            return True  # Trade successful
+        else:
+            return False
 
     def inc_vp(self):
         self.vp += 1
+
+    def dec_vp(self):
+        self.vp -= 1
 

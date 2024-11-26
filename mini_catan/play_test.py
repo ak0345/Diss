@@ -5,6 +5,7 @@ from enums import Biome, Resource, Structure, HexCompEnum
 from Hex import HexBlock
 from Player import Player
 from Die import Die
+import numpy as np
 
 
 board = Board(["ali", "jak"], 1)
@@ -32,3 +33,5 @@ print(board.hex_nums())
 print(board.robber_loc)
 
 print(board.hex_biomes())
+
+print(np.array(board.get_board_array()).shape)
