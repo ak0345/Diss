@@ -49,7 +49,7 @@ class Board:
             hex.set_biome(biome)
 
     def set_hex_nums(self):
-        num_pool = [i for i in range(1,(6*len(self.dice)))] # because final number for desert
+        num_pool = [i for i in range(1,(6*len(self.dice) + 1))] # because final number for desert
 
         while len(num_pool) < self.board_size-1: #all non desert hexes
             num_pool.append(random.choice(num_pool))
