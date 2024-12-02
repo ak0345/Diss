@@ -9,15 +9,18 @@ from Player import Player
 from Die import Die
 
 class Board:
-    def __init__(self, player_names, num_dice):
+    def __init__(self, player_names):
         self.players = [Player(name) for name in player_names]
         self.bank = Bank(20)
-        self.dice = [Die() for _ in range(num_dice)]
+        self.num_dice = 1
+        self.die_sides = 6
+        self.robber_num = self.num_dice * self.die_sides
+        self.dice = [Die(self.die_sides) for _ in range(self.num_dice)]
         self.robber_loc = -1
         self.turn_number = 0
         #setting board numbers
         self.board_size = 7
-        self.min_longest_road = 3
+        self.min_longest_road = 4
         self.current_longest_road = 0
         self.longest_road_owner = None
 
@@ -38,6 +41,26 @@ class Board:
         self.h7.set_sides_edges(self.h6, None, None, None, self.h5, self.h4)
         
         self.map_hexblocks = [self.h1, self.h2, self.h3, self.h4, self.h5, self.h6, self.h7]
+
+    def hn_name(self, hn_coords):
+            match hn_coords:
+                case (0,1):
+                    return "h1"
+                case (-1,0):
+                    return "h2"
+                case (1,1):
+                    return "h3"
+                case (0,0):
+                    return "h4"
+                case (-1,-1):
+                    return "h5"
+                case (1,0):
+                    return "h6"
+                case (0,-1):
+                    return "h7"
+                case _:
+                    print(hn_coords)
+                    return ""
         
     def set_biomes(self):
         biome_distribution = [Biome.FOREST, Biome.HILLS, Biome.FIELDS, Biome.PASTURE, Biome.DESERT]
@@ -68,54 +91,8 @@ class Board:
 
     def move_robber(self, i):
         self.robber_loc = i
-
-    def longest_road_queue(self, p):
-                
-        other_player_tags = [p_.tag for p_ in self.players if p_.tag != p.tag]
-
-        visited = deque()
-        visited_set = set()
-        for hex in self.map_hexblocks:
-            for i, edge in enumerate(hex.edges):
-                side = hex.sides[i]
-                # Check if the side has already been visited
-                if side not in visited_set and side.value == p.tag:
-                    visited.appendleft(side)
-                    visited_set.add(side)
-                    if side.links:
-                        visited_set.add(side.links)
-                elif side not in visited_set and side.value in other_player_tags:
-                    if hex.check_nearby(HexCompEnum(side.n), Structure.ROAD, self.players[1], self.turn_number):
-                        visited.appendleft(side)
-                        visited_set.add(side)
-                        if side.links:
-                            visited_set.add(side.links)
-                
-                if edge.links:
-                    for link in edge.links:
-                        if link:
-                            n = link.n
-                            side_2_add_2 = link.parent.sides[n]
-                            if side_2_add_2 not in visited_set and side_2_add_2.value == p.tag:
-                                visited.appendleft(side_2_add_2)
-                                visited_set.add(side_2_add_2)
-                                if side_2_add_2.links:
-                                    visited_set.add(side_2_add_2.links)
-                            elif side_2_add_2 not in visited_set and side_2_add_2.value in other_player_tags:
-                                if link.parent.check_nearby(HexCompEnum(side_2_add_2.n), Structure.ROAD, self.players[1], self.turn_number):
-                                    visited.appendleft(side_2_add_2)
-                                    visited_set.add(side_2_add_2)
-                                    if side_2_add_2.links:
-                                        visited_set.add(side_2_add_2.links)
-
-        #for v in visited:
-            #print(hn_name(v.parent.coords), f"S{v.n + 1}", "--- NOT MY ROAD" if v.value == self.players[1].tag else "" )
-
-        return visited
     
     def longest_road(self, p):
-        other_player_tags = [p_.tag for p_ in self.players if p_.tag != p.tag]
-        visited = set()
 
         def is_negated(path, p, other_player_tags):
             def check_adjacent_sides(side):
@@ -145,9 +122,10 @@ class Board:
                     return True
 
             # Check connections via linked edges
-            for link in side1.parent.edges[side1.n].links:
-                if link and (link == side2 or link.parent.sides[(link.n - 1) % len(link.parent.sides)] == side2):
-                    return True
+            for i in [side1.n, (side1.n + 1) % len(side1.parent.edges)]:#, (side1.n - 1) % len(side1.parent.edges)]:
+                for link in side1.parent.edges[i].links:
+                    if link and (link.parent.sides[(link.n) % len(link.parent.sides)] == side2 or link.parent.sides[(link.n - 1) % len(link.parent.sides)] == side2):
+                        return True
 
             return False
 
@@ -178,52 +156,76 @@ class Board:
                         if neighbor not in visited and is_connected(side, neighbor):
                             stack.append(neighbor)
 
-            return path
+            i = 1
+            final_path = [path[0]]
+            while i < len(path) - 1:
+                if is_connected(path[i], final_path[-1]):
+                    final_path.append(path[i])
+                i += 1
+            i2 = len(final_path) - 1
+            final_final_path = [final_path[-1]]
+            while i2 > -1:
+                if is_connected(final_path[i2], final_final_path[-1]):
+                    final_final_path.append(final_path[i2])
+                i2 -= 1
+
+            return final_final_path
 
         # Identify distinct paths
         paths = []
-        for side in self.longest_road_queue(p):
+        other_player_tags = [p_.tag for p_ in self.players if p_.tag != p.tag]
+        for side in p.roads:
+            visited = set()
             if side not in visited and side.value == p.tag:
                 paths.append(find_path(side))
+                
 
         # Validate paths
         valid_paths = []
         for path in paths:
+            for s in path:
+                if s.links and s.links in path:
+                    path.remove(s.links)
             if not is_negated(path, p, other_player_tags):
                 valid_paths.append(path)
 
-        # Output results
-        #for i, path in enumerate(valid_paths):
-            #print(f"Path {i + 1}: {[(hn_name(p.parent.coords), f'S{p.n + 1}') for p in path]}")
+        """
 
-        return max([len(path) for path in valid_paths])
+        # Output results
+        for i, path in enumerate(valid_paths):
+            print(f"Path {i + 1}: {[(hn_name(p.parent.coords), f'S{p.n + 1}') for p in path]}, length: {len(path)}")"""
+
+        return max([len(path) for path in valid_paths]) if len(valid_paths) > 0 else 0
 
     
     def place_struct(self, p, hn, pos, struct):
-        if p.cost_check(struct):
-            if hn.pos_is_empty(pos, struct) and hn.check_nearby(pos, struct, p, self.turn_number):
-                    hn.place_struct_in_pos(pos, struct, p)
-                    p.build_struct(struct)
-                    if struct == Structure.SETTLEMENT:
-                        p.inc_vp()
-                    elif struct == Structure.ROAD:
-                        longest = self.longest_road(p)
-                        p.longest_road = longest
-                        if longest >= self.min_longest_road:  # Minimum 5 roads required for "Longest Road"
-                            if longest > self.current_longest_road:
-                                    if self.longest_road_owner is not None:
-                                        self.longest_road_owner.dec_vp()
-                                        #print(f"{self.longest_road_owner.name} lost a vp")
-                                    self.longest_road_owner = p
-                                    self.longest_road_owner.inc_vp()
-                                    #print(f"{self.longest_road_owner.name} gained a vp")
-                                    self.current_longest_road = longest
-                                    print(f"Player {p.name} now has the Longest Road: {longest}")
-                    return True
+        if p.max_struct_check(struct):
+            if p.cost_check(struct):
+                if hn.pos_is_empty(pos, struct) and hn.check_nearby(pos, struct, p, self.turn_number):
+                        hn.place_struct_in_pos(pos, struct, p)
+                        p.build_struct(struct)
+                        if struct == Structure.SETTLEMENT:
+                            p.inc_vp()
+                        elif struct == Structure.ROAD:
+                            longest = self.longest_road(p)
+                            p.longest_road = longest
+                            if longest >= self.min_longest_road:  # Minimum 5 roads required for "Longest Road"
+                                if longest > self.current_longest_road:
+                                        if self.longest_road_owner is not None:
+                                            self.longest_road_owner.dec_vp()
+                                            #print(f"{self.longest_road_owner.name} lost a vp")
+                                        self.longest_road_owner = p
+                                        self.longest_road_owner.inc_vp()
+                                        #print(f"{self.longest_road_owner.name} gained a vp")
+                                        self.current_longest_road = longest
+                                        print(f"Player {p.name} now has the Longest Road: {longest}")
+                        return True
+                else:
+                    print("cannot place structure here")
             else:
-                print("cannot place structure here")
+                print("cannot afford structure")
         else:
-            print("cannot afford structure")
+            print("Player has reached max limit of building this structure")
 
     def give_resources(self, p, d_i=0, ignore_struct=None):
         #[Wood, Brick, Sheep, Wheat]
@@ -236,14 +238,22 @@ class Board:
                             if edge.value == p.tag:
                                 if hex.biome.value and self.robber_loc != i:
                                     p_inv[hex.biome.value.value] += 1
-                            
+                                
         p.add_2_inv(p_inv)
         print(f"Given Player {p.name}: {p_inv[0]} Wood, {p_inv[1]} Brick, {p_inv[2]} Sheep, {p_inv[3]} Wheat")
 
     def roll_dice(self):
         for die in self.dice:
             die.roll()
-        return sum([x.value for x in self.dice])
+        val = sum([x.value for x in self.dice])
+        if val == self.robber_num:
+            i = random.randint(0, self.board_size-1)
+            self.move_robber(i)
+            print(f"moved robber to {self.hn_name(self.map_hexblocks[i].coords)}")
+            print(f"halving all resource cards....")
+            for p in self.players:
+                p.half_inv()
+        return val
     
     def get_board_array(self):
         #show board

@@ -1,4 +1,5 @@
 import random
+from enums import Structure
 
 class Player:
     def __init__(self, name):
@@ -9,7 +10,8 @@ class Player:
         self.tag = name+str(random.randint(1, 6))
         #inventory = number of [Wood, Brick, Sheep, Wheat]
         self.inventory = [0] * types_of_resources
-        self.longest_road = 0
+        self.settlements = []
+        self.roads = []
 
     def cost_check(self, struct):
         check = [a - b for a, b in zip(self.inventory, struct.value)]
@@ -24,6 +26,9 @@ class Player:
 
     def add_2_inv(self, items):
         self.inventory = [a + b for a, b in zip(self.inventory, items)]
+    
+    def half_inv(self):
+        self.inventory = [a//2 for a in self.inventory]
 
     def del_from_inv(self, items):
         self.inventory = [a - b for a, b in zip(self.inventory, items)]
@@ -41,6 +46,16 @@ class Player:
             return True  # Trade successful
         else:
             return False
+        
+    def max_struct_check(self, struct):
+        if struct == Structure.SETTLEMENT:
+            if len(self.settlements) < 6:
+                return True
+        if struct == Structure.ROAD:
+            if len(self.roads) < 11:
+                return True
+        return False
+
 
     def inc_vp(self):
         self.vp += 1

@@ -153,7 +153,7 @@ win_vp = 5
 p1_name = input("Player 1 Name: ").strip().lower()
 p2_name = input("Player 2 Name: ").strip().lower()
 
-board = Board([p1_name, p2_name], 1)
+board = Board([p1_name, p2_name])
 
 board.make_board()
 

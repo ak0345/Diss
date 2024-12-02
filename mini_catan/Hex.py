@@ -160,17 +160,20 @@ class HexBlock:
             i = pos.value
             self.sides[i].set_value(p.tag)
             self.sides[i].set_struct(struct)
+            p.roads.append(self.sides[i])
 
             side_link = self.sides[i].links
             if side_link:
                 side_link.get_parent().sides[side_link.n].set_value(p.tag)
                 side_link.get_parent().sides[side_link.n].set_struct(struct)
+                p.roads.append(side_link)
 
         elif struct == Structure.SETTLEMENT:
             i = pos.value % len(self.edges)
 
             self.edges[i].set_value(p.tag)
             self.edges[i].set_struct(struct)
+            p.settlements.append(self.edges[i])
 
             edge_link = self.edges[i].links
             if edge_link:
@@ -178,6 +181,8 @@ class HexBlock:
                     if link:
                         link.get_parent().edges[link.n].set_value(p.tag)
                         link.get_parent().edges[link.n].set_struct(struct)
+                        p.settlements.append(link)
+            
 
     def values(self):
         new_e = list(map(lambda x: (x.struct.name if x.struct else None, x.value), self.sides))
