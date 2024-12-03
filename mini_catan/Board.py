@@ -10,6 +10,12 @@ from Die import Die
 
 class Board:
     def __init__(self, player_names):
+        """
+        Initialize the game board.
+        
+        Args:
+            player_names (list[str]): List of player names.
+        """
         self.players = [Player(name) for name in player_names]
         self.bank = Bank(20)
         self.num_dice = 1
@@ -18,20 +24,23 @@ class Board:
         self.dice = [Die(self.die_sides) for _ in range(self.num_dice)]
         self.robber_loc = -1
         self.turn_number = 0
-        #setting board numbers
+
+        # Board settings
         self.board_size = 7
         self.min_longest_road = 4
         self.current_longest_road = 0
         self.longest_road_owner = None
 
-        #defining Hex blocks
-        self.h1 = HexBlock(0,1)
-        self.h2 = HexBlock(-1,0)
-        self.h3 = HexBlock(1,1)
-        self.h4 = HexBlock(0,0) #Center
-        self.h5 = HexBlock(-1,-1)
-        self.h6 = HexBlock(1,0)  
-        self.h7 = HexBlock(0,-1)
+        # Define Hex blocks
+        self.h1 = HexBlock(0, 1)
+        self.h2 = HexBlock(-1, 0)
+        self.h3 = HexBlock(1, 1)
+        self.h4 = HexBlock(0, 0)  # Center
+        self.h5 = HexBlock(-1, -1)
+        self.h6 = HexBlock(1, 0)
+        self.h7 = HexBlock(0, -1)
+        
+        #Set Hex BLock Connections to form board
         self.h1.set_sides_edges(None, self.h3, self.h4, self.h2, None, None)
         self.h2.set_sides_edges(self.h1, self.h4, self.h5, None, None, None)
         self.h3.set_sides_edges(None, None, self.h6, self.h4, self.h1, None)
@@ -43,26 +52,38 @@ class Board:
         self.map_hexblocks = [self.h1, self.h2, self.h3, self.h4, self.h5, self.h6, self.h7]
 
     def hn_name(self, hn_coords):
-            match hn_coords:
-                case (0,1):
-                    return "h1"
-                case (-1,0):
-                    return "h2"
-                case (1,1):
-                    return "h3"
-                case (0,0):
-                    return "h4"
-                case (-1,-1):
-                    return "h5"
-                case (1,0):
-                    return "h6"
-                case (0,-1):
-                    return "h7"
-                case _:
-                    print(hn_coords)
-                    return ""
+        """
+        Helper function to get the name of a hex based on its coordinates.
+        
+        Args:
+            hn_coords (tuple[int, int]): Coordinates of the hex.
+        
+        Returns:
+            str: Name of the hex or an empty string if not found.
+        """
+        match hn_coords:
+            case (0,1):
+                return "h1"
+            case (-1,0):
+                return "h2"
+            case (1,1):
+                return "h3"
+            case (0,0):
+                return "h4"
+            case (-1,-1):
+                return "h5"
+            case (1,0):
+                return "h6"
+            case (0,-1):
+                return "h7"
+            case _:
+                print(hn_coords)
+                return ""
         
     def set_biomes(self):
+        """
+        Randomly assign biomes to the hex blocks.
+        """
         biome_distribution = [Biome.FOREST, Biome.HILLS, Biome.FIELDS, Biome.PASTURE, Biome.DESERT]
         while len(biome_distribution) < self.board_size:
             biome_distribution.append(random.choice([Biome.FOREST, Biome.HILLS, Biome.FIELDS, Biome.PASTURE]))
@@ -72,6 +93,9 @@ class Board:
             hex.set_biome(biome)
 
     def set_hex_nums(self):
+        """
+        Randomly assign numbers to hex blocks, ensuring the robber starts on a tile with number 6.
+        """
         num_pool = [i for i in range(1,(6*len(self.dice) + 1))] # because final number for desert
 
         while len(num_pool) < self.board_size-1: #all non desert hexes
@@ -86,15 +110,62 @@ class Board:
                 self.move_robber(i)
 
     def make_board(self):
+        """
+        Set up the game board by assigning biomes and numbers to hex blocks.
+        """
         self.set_biomes()
         self.set_hex_nums()
 
     def move_robber(self, i):
+        """
+        Move the robber to a specified hex block.
+        
+        Args:
+            index (int): Index of the hex block to move the robber to.
+        """
         self.robber_loc = i
     
+    def roll_dice(self):
+        """
+        Roll all dice and return the total value.
+        
+        Returns:
+            int: The total value rolled.
+        """
+        for die in self.dice:
+            die.roll()
+        val = sum([x.value for x in self.dice])
+        if val == self.robber_num:
+            i = random.randint(0, self.board_size-1)
+            self.move_robber(i)
+            print(f"moved robber to {self.hn_name(self.map_hexblocks[i].coords)}")
+            print(f"halving all resource cards....")
+            for p in self.players:
+                p.half_inv()
+        return val
+    
     def longest_road(self, p):
-
+        """
+        Calculate the longest road for a given player.
+        
+        Args:
+            player (Player): The player whose longest road is being calculated.
+        
+        Returns:
+            int: The length of the longest valid road.
+        """
         def is_negated(path, p, other_player_tags):
+            """
+            Check if a path is negated by nearby structures of other players.
+            
+            Args:
+                path (list): The path to check.
+                player (Player): The player owning the road.
+                other_player_tags (list): Tags of other players.
+            
+            Returns:
+                bool: True if the path is negated, False otherwise.
+            """
             def check_adjacent_sides(side):
                 edge_i = side.n
                 adjacent_sides = [
@@ -115,7 +186,16 @@ class Board:
             return False
 
         def is_connected(side1, side2):
-            """Check if two sides are directly connected."""
+            """
+            Check if two sides are directly connected.
+            
+            Args:
+                side1: The first side.
+                side2: The second side.
+            
+            Returns:
+                bool: True if connected, False otherwise.
+            """
             if side1.parent == side2.parent:
                 # Direct neighbors within the same hex
                 if abs(side1.n - side2.n) in {1, len(side1.parent.sides) - 1}:
@@ -130,7 +210,15 @@ class Board:
             return False
 
         def find_path(start_side):
-            """Find all connected sides forming a single road."""
+            """
+            Find all connected sides forming a single road.
+            
+            Args:
+                start_side: The starting side of the path.
+            
+            Returns:
+                list: The sides forming the path.
+            """
             path = []
             stack = [start_side]
 
@@ -199,6 +287,15 @@ class Board:
 
     
     def place_struct(self, p, hn, pos, struct):
+        """
+        Place a structure (e.g., road, settlement) on the board for a player.
+        
+        Args:
+            player (Player): The player placing the structure.
+            hex_block (HexBlock): The hex block where the structure will be placed.
+            position (int): The position within the hex block.
+            structure (Structure): The type of structure being placed.
+        """
         if p.max_struct_check(struct):
             if p.cost_check(struct):
                 if hn.pos_is_empty(pos, struct) and hn.check_nearby(pos, struct, p, self.turn_number):
@@ -228,6 +325,14 @@ class Board:
             print("Player has reached max limit of building this structure")
 
     def give_resources(self, p, d_i=0, ignore_struct=None):
+        """
+        Distribute resources to a player based on the dice value rolled.
+        
+        Args:
+            player (Player): The player to give resources to.
+            dice_value (int, optional): The value of the dice rolled. Defaults to 0.
+            ignore_struct (tuple, optional): Tuple containing hex and edge to ignore. Defaults to None.
+        """
         #[Wood, Brick, Sheep, Wheat]
         p_inv = [0, 0, 0, 0]
         for i, hex in enumerate(self.map_hexblocks):
@@ -241,21 +346,14 @@ class Board:
                                 
         p.add_2_inv(p_inv)
         print(f"Given Player {p.name}: {p_inv[0]} Wood, {p_inv[1]} Brick, {p_inv[2]} Sheep, {p_inv[3]} Wheat")
-
-    def roll_dice(self):
-        for die in self.dice:
-            die.roll()
-        val = sum([x.value for x in self.dice])
-        if val == self.robber_num:
-            i = random.randint(0, self.board_size-1)
-            self.move_robber(i)
-            print(f"moved robber to {self.hn_name(self.map_hexblocks[i].coords)}")
-            print(f"halving all resource cards....")
-            for p in self.players:
-                p.half_inv()
-        return val
     
     def get_board_array(self):
+        """
+        Get the values of all hex blocks as a list.
+        
+        Returns:
+            list: Values of all hex blocks.
+        """
         #show board
         h1 = self.h1.values()
         h2 = self.h2.values()
@@ -268,6 +366,12 @@ class Board:
         return[h1, h2, h3, h4, h5, h6, h7]
     
     def hex_nums(self):
+        """
+        Get the numbers assigned to all hex blocks.
+        
+        Returns:
+            str: Space-separated numbers of all hex blocks.
+        """
         h1 = self.h1.tile_num
         h2 = self.h2.tile_num
         h3 = self.h3.tile_num
@@ -279,6 +383,12 @@ class Board:
         return str(h1) +" "+ str(h2) +" "+ str(h3) +" "+ str(h4) +" "+ str(h5) +" "+ str(h6) +" "+ str(h7) 
     
     def hex_biomes(self):
+        """
+        Get the biomes assigned to all hex blocks.
+        
+        Returns:
+            str: Space-separated names of all hex biomes.
+        """
         h1 = self.h1.biome
         h2 = self.h2.biome
         h3 = self.h3.biome
