@@ -66,6 +66,8 @@ def custom_input(prompt, p):
     # Check for the 'board' or 'inventory' commands
     if user_input == "board":
         print(board.get_board_array())  # Display the current board with hex numbers
+        #print(f"edges: {board.get_edges()}")
+        #print(f"sides: {board.get_sides()}")
         return custom_input(prompt, p)  # Recurse to get another input after showing the board
     elif user_input == "cheat":
         p.add_2_inv([10,10,10,10])
@@ -152,11 +154,11 @@ board = Board([p1_name, p2_name])
 
 board.make_board()
 
-print("Hex Numbers: ", board.hex_nums())
+print("Hex Numbers: ", board.get_hex_nums())
 
-print("Robber Location: ", board.robber_loc)
+print(f"Robber Location: H{board.robber_loc+1}")
 
-print("Hex Biomes: ", board.hex_biomes())
+print("Hex Biomes: ", board.get_hex_biomes())
 
 for p in board.players:
     p.add_2_inv([4,4,2,2])

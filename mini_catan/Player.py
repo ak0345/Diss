@@ -82,8 +82,7 @@ class Player:
             bool: True if the trade is successful, False otherwise.
         """
         # Check if both parties have the necessary items for the trade
-        if all(my <= inv for my, inv in zip(my_items, self.inventory)) and \
-        all(pi <= inv for pi, inv in zip(p_items, p.inventory)):
+        if all(my <= inv for my, inv in zip(my_items, self.inventory)) and all(pi <= inv for pi, inv in zip(p_items, p.inventory)):
             # Perform the trade
             p.del_from_inv(p_items)
             p.add_2_inv(my_items)

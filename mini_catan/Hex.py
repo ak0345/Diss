@@ -56,8 +56,11 @@ class HexBlock:
         self.biome = None
         self.tile_num = None
 
-        self.edges = [self.HexComponent(self, i) for i in range(self.edges)]
-        self.sides = [self.HexComponent(self, i) for i in range(self.sides)]
+        self.num_of_edges = 6
+        self.num_of_sides = 6
+
+        self.edges = [self.HexComponent(self, i) for i in range(self.num_of_edges)]
+        self.sides = [self.HexComponent(self, i) for i in range(self.num_of_sides)]
         
     def set_sides_edges(self, n1, n2, n3, n4, n5, n6):
         """

@@ -30,6 +30,7 @@ class Board:
         self.min_longest_road = 4
         self.current_longest_road = 0
         self.longest_road_owner = None
+        self.desert_num = 6
 
         # Define Hex blocks
         self.h1 = HexBlock(0, 1)
@@ -50,6 +51,40 @@ class Board:
         self.h7.set_sides_edges(self.h6, None, None, None, self.h5, self.h4)
         
         self.map_hexblocks = [self.h1, self.h2, self.h3, self.h4, self.h5, self.h6, self.h7]
+
+        self.all_edges = set()
+        self.init_all_edges_list()
+
+        self.all_sides = set()
+        self.init_all_sides_list()
+
+    def init_all_edges_list(self):
+        """
+        Populate the `all_edges` list with the object instances of all unique edges from the hexagonal blocks.
+
+        This method iterates through all the hexagonal blocks (`map_hexblocks`) and their edges. 
+        It adds an edge to `all_edges` only if none of its links are already present in the list.
+        """
+        for hn in self.map_hexblocks:
+            for e in hn.edges:
+                # Check if any link in e.links is already in self.all_edges
+                if not any(link in self.all_edges for link in e.links):
+                    # Add edge to self.all_edges if it is not already present
+                    self.all_edges.add(e)
+    
+    def init_all_sides_list(self):
+        """
+        Populate the `all_sides` list with the object instances of all unique sides from the hexagonal blocks.
+
+        This method iterates through all the hexagonal blocks (`map_hexblocks`) and their sides. 
+        It adds a side to `all_sides` only if its link is not already present in the list.
+        """
+        for hn in self.map_hexblocks:
+            for s in hn.sides:
+                # Check if s.links is already in self.all_sides
+                if s.links not in self.all_sides:
+                    # Add side to self.all_sides if not already present
+                    self.all_sides.add(s)
 
     def hn_name(self, hn_coords):
         """
@@ -96,18 +131,22 @@ class Board:
         """
         Randomly assign numbers to hex blocks, ensuring the robber starts on a tile with number 6.
         """
-        num_pool = [i for i in range(1,(6*len(self.dice) + 1))] # because final number for desert
+        num_pool = [i for i in range(1,self.desert_num)] # because final number for desert
+        print(num_pool)
 
-        while len(num_pool) < self.board_size-1: #all non desert hexes
+        while len(num_pool) < self.board_size: #all non desert hexes
             num_pool.append(random.choice(num_pool))
         
-        num_pool.append(6*len(self.dice))
+        #num_pool.append(self.desert_num)
         random.shuffle(num_pool)
 
         for i, (hex, num) in enumerate(zip(self.map_hexblocks, num_pool)):
-            hex.set_tile_num(num)
-            if num == 6:
+            if hex.biome == Biome.DESERT:
+                hex.set_tile_num(self.desert_num)
                 self.move_robber(i)
+            else:
+                hex.set_tile_num(num)
+                
 
     def make_board(self):
         """
@@ -299,30 +338,32 @@ class Board:
         if p.max_struct_check(struct):
             if p.cost_check(struct):
                 if hn.pos_is_empty(pos, struct) and hn.check_nearby(pos, struct, p, self.turn_number):
-                        hn.place_struct_in_pos(pos, struct, p)
-                        p.build_struct(struct)
-                        if struct == Structure.SETTLEMENT:
-                            p.inc_vp()
-                        elif struct == Structure.ROAD:
-                            longest = self.longest_road(p)
-                            p.longest_road = longest
-                            if longest >= self.min_longest_road:  # Minimum 5 roads required for "Longest Road"
-                                if longest > self.current_longest_road:
-                                        if self.longest_road_owner is not None:
-                                            self.longest_road_owner.dec_vp()
-                                            #print(f"{self.longest_road_owner.name} lost a vp")
-                                        self.longest_road_owner = p
-                                        self.longest_road_owner.inc_vp()
-                                        #print(f"{self.longest_road_owner.name} gained a vp")
-                                        self.current_longest_road = longest
-                                        print(f"Player {p.name} now has the Longest Road: {longest}")
-                        return True
+                    hn.place_struct_in_pos(pos, struct, p)
+                    p.build_struct(struct)
+                    if struct == Structure.SETTLEMENT:
+                        p.inc_vp()
+                    elif struct == Structure.ROAD:
+                        longest = self.longest_road(p)
+                        p.longest_road = longest
+                        if longest >= self.min_longest_road:  # Minimum 4 roads required for "Longest Road"
+                            if longest > self.current_longest_road:
+                                if self.longest_road_owner is not None:
+                                    self.longest_road_owner.dec_vp()
+                                    #print(f"{self.longest_road_owner.name} lost a vp")
+                                self.longest_road_owner = p
+                                self.longest_road_owner.inc_vp()
+                                #print(f"{self.longest_road_owner.name} gained a vp")
+                                self.current_longest_road = longest
+                                print(f"Player {p.name} now has the Longest Road: {longest}")
+                    return True
                 else:
                     print("cannot place structure here")
             else:
                 print("cannot afford structure")
         else:
             print("Player has reached max limit of building this structure")
+
+        return False
 
     def give_resources(self, p, d_i=0, ignore_struct=None):
         """
@@ -354,47 +395,71 @@ class Board:
         Returns:
             list: Values of all hex blocks.
         """
-        #show board
-        h1 = self.h1.values()
-        h2 = self.h2.values()
-        h3 = self.h3.values()
-        h4 = self.h4.values()
-        h5 = self.h5.values()
-        h6 = self.h6.values()
-        h7 = self.h7.values()
-
-        return[h1, h2, h3, h4, h5, h6, h7]
+        return[hn.values() for hn in self.map_hexblocks]
     
-    def hex_nums(self):
+    def get_hex_nums(self):
         """
         Get the numbers assigned to all hex blocks.
         
         Returns:
-            str: Space-separated numbers of all hex blocks.
+            list: List of all hex tile numbers.
         """
-        h1 = self.h1.tile_num
-        h2 = self.h2.tile_num
-        h3 = self.h3.tile_num
-        h4 = self.h4.tile_num
-        h5 = self.h5.tile_num
-        h6 = self.h6.tile_num
-        h7 = self.h7.tile_num
-
-        return str(h1) +" "+ str(h2) +" "+ str(h3) +" "+ str(h4) +" "+ str(h5) +" "+ str(h6) +" "+ str(h7) 
+        return [hn.tile_num for hn in self.map_hexblocks]
     
-    def hex_biomes(self):
+    def get_hex_biomes(self):
         """
         Get the biomes assigned to all hex blocks.
         
         Returns:
-            str: Space-separated names of all hex biomes.
+             list: List of all hex biomes.
         """
-        h1 = self.h1.biome
-        h2 = self.h2.biome
-        h3 = self.h3.biome
-        h4 = self.h4.biome
-        h5 = self.h5.biome
-        h6 = self.h6.biome
-        h7 = self.h7.biome
-
-        return str(h1) +" "+ str(h2) +" "+ str(h3) +" "+ str(h4) +" "+ str(h5) +" "+ str(h6) +" "+ str(h7)
+        return [hn.biome for hn in self.map_hexblocks]
+    
+    def get_edges(self):
+        """
+        Get the values of all edges in the game.
+        
+        Returns:
+            list: A list of edge values representing all edges in the game.
+        """
+        return [e.value for e in self.all_edges]
+    
+    def get_sides(self):
+        """
+        Get the values of all sides in the game.
+        
+        Returns:
+            list: A list of side values representing all sides in the game.
+        """
+        return [s.value for s in self.all_sides]
+    
+    def get_vp(self):
+        """
+        Get the victory points (VP) for all players.
+        
+        Returns:
+            list: A list of integers where each integer represents the VP of a player.
+        """
+        return [p.vp for p in self.players]
+    
+    def get_all_invs(self):
+        """
+        Get the inventory of all players.
+        
+        Returns:
+            list: A list of player inventories, where each inventory is represented as a dictionary or similar structure.
+        """
+        return [p.inventory for p in self.players]
+    
+    def get_longest_road_owner(self):
+        """
+        Return the owner of the current longest road.
+        
+        Returns:
+            int: The player number (1-indexed) who owns the longest road. 
+                Returns 0 if no player owns the longest road.
+        """
+        for i,p in enumerate(self.players):
+            if p == self.longest_road_owner:
+                return i+1
+        return 0
