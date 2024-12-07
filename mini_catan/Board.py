@@ -1,12 +1,11 @@
 
 
 import random
-from collections import deque
-from enums import Biome, Resource, Structure, HexCompEnum
-from Bank import Bank
-from Hex import HexBlock
-from Player import Player
-from Die import Die
+from mini_catan.enums import Biome, Structure
+from mini_catan.Bank import Bank
+from mini_catan.Hex import HexBlock
+from mini_catan.Player import Player
+from mini_catan.Die import Die
 
 class Board:
     def __init__(self, player_names):
@@ -52,10 +51,10 @@ class Board:
         
         self.map_hexblocks = [self.h1, self.h2, self.h3, self.h4, self.h5, self.h6, self.h7]
 
-        self.all_edges = set()
+        self.all_edges = []
         self.init_all_edges_list()
 
-        self.all_sides = set()
+        self.all_sides = []
         self.init_all_sides_list()
 
     def init_all_edges_list(self):
@@ -70,7 +69,7 @@ class Board:
                 # Check if any link in e.links is already in self.all_edges
                 if not any(link in self.all_edges for link in e.links):
                     # Add edge to self.all_edges if it is not already present
-                    self.all_edges.add(e)
+                    self.all_edges.append(e)
     
     def init_all_sides_list(self):
         """
@@ -84,7 +83,7 @@ class Board:
                 # Check if s.links is already in self.all_sides
                 if s.links not in self.all_sides:
                     # Add side to self.all_sides if not already present
-                    self.all_sides.add(s)
+                    self.all_sides.append(s)
 
     def hn_name(self, hn_coords):
         """
@@ -354,16 +353,17 @@ class Board:
                                 self.longest_road_owner.inc_vp()
                                 #print(f"{self.longest_road_owner.name} gained a vp")
                                 self.current_longest_road = longest
-                                print(f"Player {p.name} now has the Longest Road: {longest}")
-                    return True
+                                #print(f"Player {p.name} now has the Longest Road: {longest}")
+                    return 0
                 else:
-                    print("cannot place structure here")
+                    #print("cannot place structure here")
+                    return -1
             else:
-                print("cannot afford structure")
+                #print("cannot afford structure")
+                return -2
         else:
-            print("Player has reached max limit of building this structure")
-
-        return False
+            #print("Player has reached max limit of building this structure")
+            return -3
 
     def give_resources(self, p, d_i=0, ignore_struct=None):
         """
@@ -422,7 +422,13 @@ class Board:
         Returns:
             list: A list of edge values representing all edges in the game.
         """
-        return [e.value for e in self.all_edges]
+        out = [0] * len(self.all_edges)
+        for i,e in enumerate(self.all_edges):
+            for ip,p in enumerate(self.players):
+                if e.value == p.tag:
+                    out[i] = ip + 1
+
+        return out
     
     def get_sides(self):
         """
@@ -431,7 +437,12 @@ class Board:
         Returns:
             list: A list of side values representing all sides in the game.
         """
-        return [s.value for s in self.all_sides]
+        out = [0] * len(self.all_sides)
+        for i,s in enumerate(self.all_sides):
+            for ip,p in enumerate(self.players):
+                if s.value == p.tag:
+                    out[i] = ip + 1
+        return out
     
     def get_vp(self):
         """

@@ -1,5 +1,5 @@
 import random
-from enums import Structure
+from mini_catan.enums import Structure
 
 class Player:
     def __init__(self, name):
@@ -11,11 +11,11 @@ class Player:
         """
         self.vp = 0 # Victory points
         self.longest_road = 0 
-        types_of_resources = 4
+        #types_of_resources = 4
         self.name = name
         self.tag = name+str(random.randint(1, 6)) # Generate Unique tag for player
         # Inventory = number of [Wood, Brick, Sheep, Wheat]
-        self.inventory = [0] * types_of_resources
+        self.inventory = [4, 4, 2, 2] # [0] * types_of_resources
         self.settlements = [] # List of settlements owned by the player
         self.roads = [] # List of roads owned by the player
 
@@ -56,9 +56,10 @@ class Player:
     
     def half_inv(self):
         """
-        Halve the resources in the player's inventory (used for certain game rules).
+        Halve the resources in the player's inventory if all of them are >1 (used for certain game rules).
         """
-        self.inventory = [a//2 for a in self.inventory]
+        if all(a>1 for a in self.inventory):
+            self.inventory = [a//2 for a in self.inventory]
 
     def del_from_inv(self, items):
         """
@@ -68,6 +69,9 @@ class Player:
             items (list): The resources to be removed.
         """
         self.inventory = [a - b for a, b in zip(self.inventory, items)]
+
+    def trade_cost_check(self, p, my_items, p_items):
+        return all(my <= inv for my, inv in zip(my_items, self.inventory)) and all(pi <= inv for pi, inv in zip(p_items, p.inventory))
 
     def trade_I_with_p(self, p, my_items, p_items):
         """
@@ -82,7 +86,7 @@ class Player:
             bool: True if the trade is successful, False otherwise.
         """
         # Check if both parties have the necessary items for the trade
-        if all(my <= inv for my, inv in zip(my_items, self.inventory)) and all(pi <= inv for pi, inv in zip(p_items, p.inventory)):
+        if self.trade_cost_check(p, my_items, p_items):
             # Perform the trade
             p.del_from_inv(p_items)
             p.add_2_inv(my_items)

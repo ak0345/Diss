@@ -1,5 +1,5 @@
 
-from enums import Structure
+from mini_catan.enums import Structure
 
 
 class HexBlock:

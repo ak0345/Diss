@@ -1,5 +1,5 @@
-from Board import Board
-from enums import Biome, Resource, Structure, HexCompEnum
+from mini_catan.Board import Board
+from mini_catan.enums import Structure, HexCompEnum
 
 def check_hn_name(hn_str):
     match hn_str:
@@ -100,23 +100,23 @@ def attempt_placement_until_success(board, player, prompt_hex, prompt_pos, struc
         hex_index = get_valid_input(prompt_hex, check_hn_name, player)
         if hex_index == "cancel":
             return None
-        pos_obj = get_valid_input(prompt_pos, check_s_name if structure_type == Structure.ROAD else check_e_name, player)
-        if pos_obj == "cancel":
+        pos_enum = get_valid_input(prompt_pos, check_s_name if structure_type == Structure.ROAD else check_e_name, player)
+        if pos_enum == "cancel":
             return None
         
         hex_obj = board.map_hexblocks[hex_index]
         # Try placing the structure and break if successful
         if board.turn_number > 0:
-            if board.place_struct(player, hex_obj, pos_obj, structure_type):
-                return (hex_index, pos_obj)
+            if board.place_struct(player, hex_obj, pos_enum, structure_type):
+                return (hex_index, pos_enum)
             else:
                 print("Illegal placement, please try again.")
         else:
             if prev_coords and structure_type == Structure.ROAD:
                 prev_set_coords = (board.map_hexblocks[prev_coords[0]], prev_coords[1])
-                if hex_obj.check_road_next_to_settlement_in_first_turn(pos_obj, prev_set_coords):
-                    if board.place_struct(player, hex_obj, pos_obj, structure_type):
-                        return (hex_index, pos_obj)
+                if hex_obj.check_road_next_to_settlement_in_first_turn(pos_enum, prev_set_coords):
+                    if board.place_struct(player, hex_obj, pos_enum, structure_type):
+                        return (hex_index, pos_enum)
                     else:
                         print("Illegal placement, please try again.")
                 else:
@@ -161,7 +161,7 @@ print(f"Robber Location: H{board.robber_loc+1}")
 print("Hex Biomes: ", board.get_hex_biomes())
 
 for p in board.players:
-    p.add_2_inv([4,4,2,2])
+    #p.add_2_inv([4,4,2,2])
     # Placement for the first settlement and road
     p.first_settlement = attempt_placement_until_success(board, p, f"Player {p.name} Place Your First Settlement ( Hex Num ): ", f"Player {p.name} Place Your First Settlement ( Edge Num ): ", Structure.SETTLEMENT)
     attempt_placement_until_success(board, p, f"Player {p.name} Place Your First Road ( Hex Num ): ", f"Player {p.name} Place Your First Road ( Side Num ): ", Structure.ROAD, p.first_settlement)
