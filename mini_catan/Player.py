@@ -58,8 +58,9 @@ class Player:
         """
         Halve the resources in the player's inventory if all of them are >1 (used for certain game rules).
         """
-        if all(a>1 for a in self.inventory):
-            self.inventory = [a//2 for a in self.inventory]
+        for i, a in enumerate(self.inventory):
+            if a>1:
+                self.inventory[i] = a//2
 
     def del_from_inv(self, items):
         """
