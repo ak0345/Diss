@@ -8,6 +8,28 @@ from mini_catan.Hex import HexBlock
 from mini_catan.Player import Player
 from mini_catan.Die import Die
 
+# Reward variables
+S_max = 5
+n_type = 4
+
+alpha = 0.5
+U = lambda x: -np.exp(-alpha * x)
+R_avg = lambda R_r: np.sum(R_r) / n_type
+
+# Reward functions
+ROAD_REWARD = lambda S_2R, S_p: 1 + 1.15 * ( S_2R / max(S_p, 1))
+SETTLEMENT_REWARD = lambda S_p: 2 + 1.15 * (S_p / S_max)
+TRADE_BANK_REWARD = lambda d_r: 1 + U(0.25 + np.sum(d_r))
+TRADE_PLAYER_REWARD = lambda d_r: 1 + U(0.5 + np.sum(d_r))
+REJECTED_TRADE_REWARD = lambda T_R: U(1.5 + np.power(T_R,2))
+COUTNER_OFFER_REJECTED_REWARD = lambda T_R: U(2 + np.power(T_R,3))
+COUTNER_OFFER_ACCEPTED_REWARD = lambda d_r: 1 + U(2.5 + np.sum(d_r))
+INVENTORY_BALANCE_REWARD = lambda T_n, d_r, R_r: U(T_n + 1 + np.sum(np.abs(d_r - R_avg(R_r))))
+LONGEST_ROAD_REWARD = 2
+END_TURN_REWARD = 0.15
+WIN_REWARD = 10
+LOSE_REWARD = -10
+
 class MiniCatanEnv(gym.Env):
     """Custom Gym Environment for Catan."""
     
@@ -356,7 +378,7 @@ class MiniCatanEnv(gym.Env):
                 
                 if action == 0:  # Build Road
                     print("Player builds a road.")
-                    reward = 1  # Modify as per game logic
+                    reward = ROAD_REWARD  # Modify as per game logic
                     self.waiting_for_road_build_followup = True
 
                 elif action == 1:  # Build Settlement

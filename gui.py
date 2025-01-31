@@ -112,7 +112,7 @@ TRADE_OVERLAY_Y = (WINDOW_HEIGHT // 2) - 150
 INVENTORY_BOX_X = 20  
 INVENTORY_BOX_Y = 20
 
-ROLL_DICE_BUTTON_POS = (20, 310, 140, 50)
+ROLL_DICE_BUTTON_POS = (20, 350, 140, 50)
 TRADE_BUTTON_POS = (WINDOW_WIDTH - 190, 650, 140, 50)
 EXIT_BUTTON_POS = (WINDOW_WIDTH - 190, 20, 180, 50)
 ACCEPT_TRADE_BUTTON_POS = (WINDOW_WIDTH // 2 - 180 - 90 - 60, 720, 200, 50)  
@@ -293,7 +293,7 @@ class Hex:
         pygame.draw.polygon(screen, BLACK, self.points, 2)  # Outline
 
 # Load and Process GIF
-gif_path = r"C:\Users\foosh\OneDrive\Desktop\projects\DIss\mini_catan\catan.gif"
+gif_path = "catan.gif"
 gif_image = Image.open(gif_path)
 gif_frames = []
 for frame in range(gif_image.n_frames):

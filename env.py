@@ -5,7 +5,7 @@ from random import randint
 
 a = gym.make("MiniCatanEnv-v0")
 
-#a.reset()
+a.reset()
 while True:
     try:
         """
@@ -45,7 +45,7 @@ while True:
         print("------------------------------------------------")
         break
     except AssertionError as e:
-        #print(e)
-        #print("trying again teehee...")
+        print(e)
+        print("trying again teehee...")
         #break
         pass
