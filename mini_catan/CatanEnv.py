@@ -22,14 +22,18 @@ ROAD_REWARD = lambda S_2R, S_p: 1 + 1.15 * ( S_2R / max(S_p, 1))
 SETTLEMENT_REWARD = lambda S_p: 2 + 1.5 * (S_p / S_max)
 TRADE_BANK_REWARD = lambda d_r: 1 + U(0.25 + np.sum(d_r))
 TRADE_PLAYER_REWARD = lambda d_r: 1 + U(0.5 + np.sum(d_r))
-REJECTED_TRADE_REWARD = lambda T_R: -U(1.5 + np.power(T_R,2))
-COUTNER_OFFER_REJECTED_REWARD = lambda T_R: -U(2 + np.power(T_R,3))
+REJECTED_TRADE_REWARD = lambda T_R: U(1.5 + np.power(T_R,2))
+COUTNER_OFFER_REJECTED_REWARD = lambda T_R: U(2 + np.power(T_R,3))
 COUTNER_OFFER_ACCEPTED_REWARD = lambda d_r: 1 + U(2.5 + np.sum(d_r))
-INVENTORY_BALANCE_REWARD = lambda T_n, d_r, R_r: U(T_n + 1 + np.sum(np.abs(d_r - R_avg(R_r))))
+INVENTORY_BALANCE_REWARD = lambda T_n, R_r: U(T_n + 1 + np.sum(np.abs(R_r - R_avg(R_r))))
 LONGEST_ROAD_REWARD = 2
-END_TURN_REWARD = 0.15
+END_TURN_REWARD = 0.05
 WIN_REWARD = 10
 LOSE_REWARD = -10
+INITIATE_ROAD_REWARD = 0.2
+INITIATE_SETTLEMENT_REWARD = 0.3
+INITIATE_TRADE_BANK_REWARD = 0.1
+INITIATE_TRADE_PLAYER_REWARD = 0.15
 
 class MiniCatanEnv(gym.Env):
     """Custom Gym Environment for Catan."""
@@ -44,6 +48,8 @@ class MiniCatanEnv(gym.Env):
         self.max_victory_points = 10
 
         self.board = Board(["P1", "P2"])
+
+        self.prev_longest_road_owner = self.board.get_longest_road_owner()
 
         self._reset_followup_variables()
         
@@ -264,7 +270,6 @@ class MiniCatanEnv(gym.Env):
                         elif placement == -2: raise AssertionError("Cannot Afford Structure")
                         elif placement == -3: raise AssertionError("Reached Max Structure Limit")
 
-                        #reward += ROAD_REWARD(curr_player.get_player_s2r(), len(curr_player.settlements))
                         self.waiting_for_road_build_followup = False
 
             elif self.waiting_for_settlement_build_followup:
@@ -285,6 +290,7 @@ class MiniCatanEnv(gym.Env):
 
                 trade = curr_player.trade_I_with_p(self.board.bank, action[0] * 2, action[1])
                 assert trade, "Cannot Afford Trade"
+                reward += TRADE_BANK_REWARD(action[1] - (action[0] * 2)) #Requested - Offering
                 self.waiting_for_b_trade_followup = False
 
             elif self.waiting_for_p_trade_followup_1:
@@ -297,12 +303,11 @@ class MiniCatanEnv(gym.Env):
                         self.waiting_for_p_trade_followup_1 = False
                         trade = self.board.players[self.current_player].trade_I_with_p(curr_player, self.offer[0], self.offer[1])
                         assert trade, "Cannot Afford Trade"
-                        #reward = 2 #trade accepted and ressources gained
                         
                     elif action == 1:
                         self.current_player = (self.current_player + 1) % self.num_players
                         self.waiting_for_p_trade_followup_1 = False
-                        #reward = -1.5 # trade rejected
+                        reward += REJECTED_TRADE_REWARD(self.current_player.trades_rejected) # trade rejected
                         
                     elif action == 2:
                         self.counter_sent = True
@@ -319,7 +324,6 @@ class MiniCatanEnv(gym.Env):
                     self.current_player = (self.current_player + 1) % self.num_players
                     self.waiting_for_p_trade_followup_2 = True
                     self.waiting_for_p_trade_followup_1 = False
-                    #reward = -1 # trade rejected
 
                 else:
                     #send offer
@@ -328,6 +332,7 @@ class MiniCatanEnv(gym.Env):
                     trade = curr_player.trade_cost_check(self.board.players[(self.current_player + 1) % self.num_players], action[0], action[1])
                     assert trade, "Cannot Afford Trade"
 
+                    reward += TRADE_PLAYER_REWARD(action[1] - action[0])
                     self.reply_to_offer = True
                     self.current_player = (self.current_player + 1) % self.num_players
 
@@ -337,14 +342,13 @@ class MiniCatanEnv(gym.Env):
                 if action == 0:
                     trade = self.board.players[(self.current_player + 1) % self.num_players].trade_I_with_p(curr_player, self.offer[0], self.offer[1])
                     assert trade, "Cannot Afford Trade"
-                    #reward = 0.25 # counter accepted
                 elif action == 1:
                     #end trade
-                    pass
-                    #reward = 0.5 # rejecting a bad trade
+                    self.current_player.trades_rejected += 1
+                    reward += COUTNER_OFFER_REJECTED_REWARD(self.current_player.trades_rejected)
                 elif action == 2:
                     self.waiting_for_p_trade_followup_3 = True
-                    #reward = 0.5 # countering a bad trade
+                    reward += TRADE_PLAYER_REWARD(self.offer[1] - self.offer[0]) # countering a bad trade
                 self.waiting_for_p_trade_followup_2 = False
 
 
@@ -356,11 +360,12 @@ class MiniCatanEnv(gym.Env):
                         self.current_player = (self.current_player + 1) % self.num_players
                         trade = self.board.players[self.current_player].trade_I_with_p(curr_player, self.offer[0], self.offer[1])
                         assert trade, "Cannot Afford Trade"
-                        #reward = 2.5 #trade accepted and ressources gained and negotiated well
+                        reward += COUTNER_OFFER_ACCEPTED_REWARD(self.offer[1] - self.offer[0])#trade accepted and ressources gained and negotiated well
                         
                     elif action == 1:
                         self.current_player = (self.current_player + 1) % self.num_players
-                        #reward = -2 # trade rejected twice
+                        self.current_player.trades_rejected += 1
+                        reward += COUTNER_OFFER_REJECTED_REWARD(self.current_player.trades_rejected) # trade rejected twice
 
                     self.reply_to_offer = False
                     self.waiting_for_p_trade_followup_3 = False
@@ -374,6 +379,7 @@ class MiniCatanEnv(gym.Env):
 
                     self.current_player = (self.current_player + 1) % self.num_players
                     self.reply_to_offer = True
+                    reward += TRADE_PLAYER_REWARD(action[1] - action[0])
                 
             
             else:
@@ -382,26 +388,32 @@ class MiniCatanEnv(gym.Env):
                 if action == 0:  # Build Road
                     print("Player builds a road.")
                     self.waiting_for_road_build_followup = True
+                    reward += INITIATE_ROAD_REWARD
 
                 elif action == 1:  # Build Settlement
                     print("Player builds a settlement.")
                     self.waiting_for_settlement_build_followup = True
+                    reward += INITIATE_SETTLEMENT_REWARD
 
                 elif action == 2:  # Trade with player
                     print("Player initiates a trade with Player.")
                     self.waiting_for_p_trade_followup_1 = True
+                    reward += INITIATE_TRADE_PLAYER_REWARD
 
                 elif action == 3:  # Trade with Bank
                     print("Player initiates a trade with Bank.")
                     self.waiting_for_b_trade_followup = True
+                    reward += INITIATE_TRADE_BANK_REWARD
 
                 elif action == 4:  # End Turn
                     print("Player Ends Turn.")
                     self.current_player = (self.current_player + 1) % self.num_players
                     self.board.turn_number += 1
-                    reward = 0.15
+                    reward += END_TURN_REWARD
 
                     self._resouce_collection_round()
+
+                    reward += INVENTORY_BALANCE_REWARD(curr_player.total_trades, np.array(curr_player.inventory)) #inventory balance penalty at end of turn
 
         else: 
             #build set 1 and road 1 and then set 2 and road 2
@@ -456,10 +468,17 @@ class MiniCatanEnv(gym.Env):
         obs["longest_road_owner"] = self.board.get_longest_road_owner()
         obs["robber_loc"] = self.board.robber_loc
 
+        if self.prev_longest_road_owner != self.board.get_longest_road_owner() and self.current_player == self.board.current_player:
+            reward += LONGEST_ROAD_REWARD
+        self.prev_longest_road_owner = self.board.get_longest_road_owner()
+
         # Check for game end condition
         if any(player >= self.max_victory_points for player in obs["victory_points"]):
             done = True
-            reward = 10
+            if curr_player.vp >= self.max_victory_points:
+                reward = WIN_REWARD
+            else: 
+                reward = LOSE_REWARD
 
         info = obs
 
