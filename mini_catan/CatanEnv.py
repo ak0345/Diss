@@ -10,6 +10,7 @@ from mini_catan.Die import Die
 
 # Reward variables
 S_max = 5
+R_max = 10
 n_type = 4
 
 alpha = 0.5
@@ -18,7 +19,7 @@ R_avg = lambda R_r: np.sum(R_r) / n_type
 
 # Reward functions
 ROAD_REWARD = lambda S_2R, S_p: 1 + 1.15 * ( S_2R / max(S_p, 1))
-SETTLEMENT_REWARD = lambda S_p: 2 + 1.15 * (S_p / S_max)
+SETTLEMENT_REWARD = lambda S_p: 2 + 1.5 * (S_p / S_max)
 TRADE_BANK_REWARD = lambda d_r: 1 + U(0.25 + np.sum(d_r))
 TRADE_PLAYER_REWARD = lambda d_r: 1 + U(0.5 + np.sum(d_r))
 REJECTED_TRADE_REWARD = lambda T_R: U(1.5 + np.power(T_R,2))
@@ -263,6 +264,7 @@ class MiniCatanEnv(gym.Env):
                         elif placement == -2: raise AssertionError("Cannot Afford Structure")
                         elif placement == -3: raise AssertionError("Reached Max Structure Limit")
 
+                        #reward += ROAD_REWARD(curr_player.get_player_s2r(), len(curr_player.settlements))
                         self.waiting_for_road_build_followup = False
 
             elif self.waiting_for_settlement_build_followup:
@@ -295,12 +297,12 @@ class MiniCatanEnv(gym.Env):
                         self.waiting_for_p_trade_followup_1 = False
                         trade = self.board.players[self.current_player].trade_I_with_p(curr_player, self.offer[0], self.offer[1])
                         assert trade, "Cannot Afford Trade"
-                        reward = 2 #trade accepted and ressources gained
+                        #reward = 2 #trade accepted and ressources gained
                         
                     elif action == 1:
                         self.current_player = (self.current_player + 1) % self.num_players
                         self.waiting_for_p_trade_followup_1 = False
-                        reward = -1.5 # trade rejected
+                        #reward = -1.5 # trade rejected
                         
                     elif action == 2:
                         self.counter_sent = True
@@ -317,7 +319,7 @@ class MiniCatanEnv(gym.Env):
                     self.current_player = (self.current_player + 1) % self.num_players
                     self.waiting_for_p_trade_followup_2 = True
                     self.waiting_for_p_trade_followup_1 = False
-                    reward = -1 # trade rejected
+                    #reward = -1 # trade rejected
 
                 else:
                     #send offer
@@ -335,13 +337,14 @@ class MiniCatanEnv(gym.Env):
                 if action == 0:
                     trade = self.board.players[(self.current_player + 1) % self.num_players].trade_I_with_p(curr_player, self.offer[0], self.offer[1])
                     assert trade, "Cannot Afford Trade"
-                    reward = 0.25 # counter accepted
+                    #reward = 0.25 # counter accepted
                 elif action == 1:
                     #end trade
-                    reward = 0.5 # rejecting a bad trade
+                    pass
+                    #reward = 0.5 # rejecting a bad trade
                 elif action == 2:
                     self.waiting_for_p_trade_followup_3 = True
-                    reward = 0.5 # countering a bad trade
+                    #reward = 0.5 # countering a bad trade
                 self.waiting_for_p_trade_followup_2 = False
 
 
@@ -353,11 +356,11 @@ class MiniCatanEnv(gym.Env):
                         self.current_player = (self.current_player + 1) % self.num_players
                         trade = self.board.players[self.current_player].trade_I_with_p(curr_player, self.offer[0], self.offer[1])
                         assert trade, "Cannot Afford Trade"
-                        reward = 2.5 #trade accepted and ressources gained and negotiated well
+                        #reward = 2.5 #trade accepted and ressources gained and negotiated well
                         
                     elif action == 1:
                         self.current_player = (self.current_player + 1) % self.num_players
-                        reward = -2 # trade rejected twice
+                        #reward = -2 # trade rejected twice
 
                     self.reply_to_offer = False
                     self.waiting_for_p_trade_followup_3 = False
@@ -378,29 +381,28 @@ class MiniCatanEnv(gym.Env):
                 
                 if action == 0:  # Build Road
                     print("Player builds a road.")
-                    reward = ROAD_REWARD  # Modify as per game logic
                     self.waiting_for_road_build_followup = True
 
                 elif action == 1:  # Build Settlement
                     print("Player builds a settlement.")
-                    reward = 2  # Modify as per game logic
+                    #reward = 2  # Modify as per game logic
                     self.waiting_for_settlement_build_followup = True
 
                 elif action == 2:  # Trade with player
                     print("Player initiates a trade with Player.")
-                    reward = 0.5  # Modify as per game logic
+                    #reward = 0.5  # Modify as per game logic
                     self.waiting_for_p_trade_followup_1 = True
 
                 elif action == 3:  # Trade with Bank
                     print("Player initiates a trade with Bank.")
-                    reward = 0.35  # Modify as per game logic
+                    #reward = 0.35  # Modify as per game logic
                     self.waiting_for_b_trade_followup = True
 
                 elif action == 4:  # End Turn
                     print("Player Ends Turn.")
                     self.current_player = (self.current_player + 1) % self.num_players
                     self.board.turn_number += 1
-                    reward = 0.15
+                    #reward = 0.15
 
                     self._resouce_collection_round()
 
@@ -416,7 +418,9 @@ class MiniCatanEnv(gym.Env):
                         if placement == -1: raise AssertionError("Cannot Place Structure Here")
                         elif placement == -2: raise AssertionError("Cannot Afford Structure")
                         elif placement == -3: raise AssertionError("Reached Max Structure Limit")
-
+                        
+                        reward += SETTLEMENT_REWARD(len(curr_player.settlements))
+                        
                         if self.init_build < 2:
                             curr_player.first_settlement = (e.parent, self._convert_e(e.n))
                         self.init_road_build = True
@@ -431,6 +435,8 @@ class MiniCatanEnv(gym.Env):
                         if placement == -1: raise AssertionError("Cannot Place Structure Here")
                         elif placement == -2: raise AssertionError("Cannot Afford Structure")
                         elif placement == -3: raise AssertionError("Reached Max Structure Limit")
+
+                        reward += ROAD_REWARD(curr_player.get_player_s2r(), len(curr_player.settlements))
 
                         self.init_road_build = False
                         self.init_settlement_build = True

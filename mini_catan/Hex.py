@@ -262,7 +262,7 @@ class HexBlock:
             if side_link:
                 side_link.get_parent().sides[side_link.n].set_value(p.tag)
                 side_link.get_parent().sides[side_link.n].set_struct(struct)
-                p.roads.append(side_link)
+                #p.roads.append(side_link)
 
         elif struct == Structure.SETTLEMENT:
             i = pos.value % len(self.edges)
@@ -277,7 +277,7 @@ class HexBlock:
                     if link:
                         link.get_parent().edges[link.n].set_value(p.tag)
                         link.get_parent().edges[link.n].set_struct(struct)
-                        p.settlements.append(link)
+                        #p.settlements.append(link)
             
 
     def values(self):

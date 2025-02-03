@@ -19,6 +19,22 @@ class Player:
         self.settlements = [] # List of settlements owned by the player
         self.roads = [] # List of roads owned by the player
 
+    def get_player_s2r(self):
+        count = 0
+        for s in self.settlements:
+            road_count = 0
+            for r in self.roads:
+                if (r.get_parent().edges[r.n % len(r.get_parent().edges)] == s) or (r.get_parent().edges[(r.n + 1) % len(r.get_parent().edges)] == s):
+                    road_count += 1
+                if  r.links:
+                    if (r.links.get_parent().edges[r.n % len(r.links.get_parent().edges)] == s) or (r.links.get_parent().edges[(r.n + 1) % len(r.links.get_parent().edges)] == s):
+                        road_count += 1
+                if road_count >= 2:
+                    count += 1
+                    break
+        return count
+        
+
     def cost_check(self, struct):
         """
         Check if the player has enough resources to build a given structure.

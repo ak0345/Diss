@@ -5,7 +5,7 @@ from random import randint
 
 a = gym.make("MiniCatanEnv-v0")
 
-a.reset()
+#a.reset()
 while True:
     try:
         """

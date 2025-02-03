@@ -111,7 +111,6 @@ class Board:
             case (0,-1):
                 return "h7"
             case _:
-                print(hn_coords)
                 return ""
         
     def set_biomes(self):
@@ -131,7 +130,6 @@ class Board:
         Randomly assign numbers to hex blocks, ensuring the robber starts on a tile with number 6.
         """
         num_pool = [i for i in range(1,self.desert_num)] # because final number for desert
-        print(num_pool)
 
         while len(num_pool) < self.board_size: #all non desert hexes
             num_pool.append(random.choice(num_pool))
