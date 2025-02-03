@@ -22,8 +22,8 @@ ROAD_REWARD = lambda S_2R, S_p: 1 + 1.15 * ( S_2R / max(S_p, 1))
 SETTLEMENT_REWARD = lambda S_p: 2 + 1.5 * (S_p / S_max)
 TRADE_BANK_REWARD = lambda d_r: 1 + U(0.25 + np.sum(d_r))
 TRADE_PLAYER_REWARD = lambda d_r: 1 + U(0.5 + np.sum(d_r))
-REJECTED_TRADE_REWARD = lambda T_R: U(1.5 + np.power(T_R,2))
-COUTNER_OFFER_REJECTED_REWARD = lambda T_R: U(2 + np.power(T_R,3))
+REJECTED_TRADE_REWARD = lambda T_R: -U(1.5 + np.power(T_R,2))
+COUTNER_OFFER_REJECTED_REWARD = lambda T_R: -U(2 + np.power(T_R,3))
 COUTNER_OFFER_ACCEPTED_REWARD = lambda d_r: 1 + U(2.5 + np.sum(d_r))
 INVENTORY_BALANCE_REWARD = lambda T_n, d_r, R_r: U(T_n + 1 + np.sum(np.abs(d_r - R_avg(R_r))))
 LONGEST_ROAD_REWARD = 2
@@ -385,24 +385,21 @@ class MiniCatanEnv(gym.Env):
 
                 elif action == 1:  # Build Settlement
                     print("Player builds a settlement.")
-                    #reward = 2  # Modify as per game logic
                     self.waiting_for_settlement_build_followup = True
 
                 elif action == 2:  # Trade with player
                     print("Player initiates a trade with Player.")
-                    #reward = 0.5  # Modify as per game logic
                     self.waiting_for_p_trade_followup_1 = True
 
                 elif action == 3:  # Trade with Bank
                     print("Player initiates a trade with Bank.")
-                    #reward = 0.35  # Modify as per game logic
                     self.waiting_for_b_trade_followup = True
 
                 elif action == 4:  # End Turn
                     print("Player Ends Turn.")
                     self.current_player = (self.current_player + 1) % self.num_players
                     self.board.turn_number += 1
-                    #reward = 0.15
+                    reward = 0.15
 
                     self._resouce_collection_round()
 
