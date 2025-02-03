@@ -19,6 +19,7 @@ class Player:
         self.settlements = [] # List of settlements owned by the player
         self.roads = [] # List of roads owned by the player
         self.trades_rejected = 0
+        self.total_trades = 0
 
     def get_player_s2r(self):
         count = 0
