@@ -269,7 +269,8 @@ class MiniCatanEnv(gym.Env):
                         if placement == -1: raise AssertionError("Cannot Place Structure Here")
                         elif placement == -2: raise AssertionError("Cannot Afford Structure")
                         elif placement == -3: raise AssertionError("Reached Max Structure Limit")
-
+                        
+                        reward += ROAD_REWARD(curr_player.get_player_s2r(), len(curr_player.settlements))
                         self.waiting_for_road_build_followup = False
 
             elif self.waiting_for_settlement_build_followup:
@@ -281,7 +282,8 @@ class MiniCatanEnv(gym.Env):
                         if placement == -1: raise AssertionError("Cannot Place Structure Here")
                         elif placement == -2: raise AssertionError("Cannot Afford Structure")
                         elif placement == -3: raise AssertionError("Reached Max Structure Limit")
-
+                        
+                        reward += SETTLEMENT_REWARD(len(curr_player.settlements))
                         self.waiting_for_settlement_build_followup = False
 
             elif self.waiting_for_b_trade_followup:
