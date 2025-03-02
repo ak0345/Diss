@@ -193,36 +193,57 @@ class HexBlock:
         Returns:
             bool: True if the position is valid for the structure, False otherwise.
         """
-
+        
         if struct == Structure.ROAD:
             i = pos.value
 
-            other_set_check = ( self.edges[i % len(self.edges)].value is not None and self.edges[i % len(self.edges)].value != p.tag or 
-                    self.edges[(i + 1)% len(self.edges)].value is not None and self.edges[(i + 1) % len(self.edges)].value != p.tag )
-            
-            if other_set_check:
+            # 1) If this side (road-position) is already occupied, can't place here.
+            side_comp = self.sides[i]
+            if side_comp.value is not None:
                 return False
-            
-            # Check if any of the adjacent edges are occupied by the player's tag
-            neighbor = False
-            for i_check in [(i-1), i, (i+1) % len(self.sides)]:
-                if self.sides[i_check].links:
-                    link = self.sides[i_check].links
-                    i_n = link.n
-                    neighbor = neighbor or (link.parent.edges[i_n % len(self.edges)].value == p.tag or 
-                        link.parent.edges[(i_n + 1) % len(self.edges)].value == p.tag or
-                        link.parent.sides[(i_n - 1) % len(self.sides)].value is not None or
-                        link.parent.sides[(i_n + 1) % len(self.sides)].value is not None)
+
+            # 2) Identify the two intersection edges for this side.
+            e1 = self.edges[i]
+            e2 = self.edges[(i + 1) % len(self.edges)]
+
+            # 3) Check whether at least one intersection is connected to the player's network.
+            #    We'll define a helper that returns True if an intersection is "owned by" or 
+            #    "directly linked to" the player (their settlement or road).
+            def intersection_belongs_to_player(edge_comp):
+                # If this edge is occupied by the player's tag, 
+                # that means it's the player's settlement or road.
+                if edge_comp.value == p.tag:
+                    return True
                 
-            return (self.edges[i % len(self.edges)].value == p.tag or 
-                    self.edges[(i + 1) % len(self.edges)].value == p.tag or 
-                    self.sides[(i - 1) % len(self.sides)].value is not None or 
-                    self.sides[(i + 1) % len(self.sides)].value is not None or neighbor)
+                # Otherwise, check if there's a link (or list of links) 
+                # that leads to a component owned by the player.
+                if edge_comp.links:
+                    if isinstance(edge_comp.links, list):
+                        for linked_edge in edge_comp.links:
+                            if linked_edge and linked_edge.value == p.tag:
+                                return True
+                    else:
+                        # Single link
+                        if edge_comp.links.value == p.tag:
+                            return True
+                
+                return False
+            links_check = False
+            for e in [e1, e2]:
+                if e.links:
+                    for link in e.links:
+                        if link:
+                            links_check = links_check or intersection_belongs_to_player(link)
+
+            connected = (intersection_belongs_to_player(e1) or intersection_belongs_to_player(e2) or
+                links_check)
+            
+            return connected
         
         elif struct == Structure.SETTLEMENT:
             i = pos.value % len(self.edges)
             # Check adjacent sides
-            if turn_number > 1:
+            if turn_number > 0:
                 side_check = self.check_sides(i, p)
             else:
                 side_check = True
@@ -236,7 +257,7 @@ class HexBlock:
                 for link in links:
                     if link:
                         # Check neighboring hexes’ sides and edges
-                        if turn_number > 1:
+                        if turn_number > 0:
                             side_check = side_check or link.get_parent().check_sides(link.n, p)
                         edge_check = edge_check and link.get_parent().check_empty_edges(link.n, 1)
             

@@ -43,6 +43,7 @@ while True:
         print("------------------------------------------------")
         print(a.step(3))
         print("------------------------------------------------")
+        a.render()
         break
     except AssertionError as e:
         print(e)

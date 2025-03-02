@@ -182,145 +182,120 @@ class Board:
     
     def longest_road(self, p):
         """
-        Calculate the longest road for a given player.
+        Calculate the longest road for a given player, including roads that span multiple hexes.
+        
+        This method builds a connectivity graph among the player's road segments (placed on hex sides)
+        by checking whether the two endpoints (edges) of each road are the same or linked (across hex boundaries).
+        It also makes sure that a shared endpoint is not blocked by an opponent's structure.
         
         Args:
-            player (Player): The player whose longest road is being calculated.
+            p (Player): The player whose road network is evaluated.
         
         Returns:
-            int: The length of the longest valid road.
+            int: The number of road segments in the longest continuous road.
         """
-        def is_negated(path, p, other_player_tags):
-            """
-            Check if a path is negated by nearby structures of other players.
-            
-            Args:
-                path (list): The path to check.
-                player (Player): The player owning the road.
-                other_player_tags (list): Tags of other players.
-            
-            Returns:
-                bool: True if the path is negated, False otherwise.
-            """
-            def check_adjacent_sides(side):
-                edge_i = side.n
-                adjacent_sides = [
-                    side.parent.sides[edge_i],
-                    side.parent.sides[(edge_i - 1) % len(side.parent.sides)],
-                    side.parent.sides[(edge_i + 1) % len(side.parent.sides)],
-                ]
-                count_p_tag = sum(1 for s in adjacent_sides if s.value == p.tag)
-                count_other_tag = sum(1 for s in adjacent_sides if s.value in other_player_tags)
-                return count_p_tag == 2 and count_other_tag == 1
+        from collections import defaultdict
 
-            for side in path:
-                if check_adjacent_sides(side):
-                    return True
-                for link in side.parent.edges[side.n].links:
-                    if link and check_adjacent_sides(link):
+        def same_intersection(e1, e2):
+            """
+            Determine if two edge components represent the same intersection.
+            
+            Two edges are considered the same if they are identical, or if one is linked to the other.
+            """
+            if e1 is e2:
+                return True
+            # Check if e1 links to e2
+            if e1.links:
+                if isinstance(e1.links, list):
+                    if e2 in e1.links:
                         return True
-            return False
-
-        def is_connected(side1, side2):
-            """
-            Check if two sides are directly connected.
-            
-            Args:
-                side1: The first side.
-                side2: The second side.
-            
-            Returns:
-                bool: True if connected, False otherwise.
-            """
-            if side1.parent == side2.parent:
-                # Direct neighbors within the same hex
-                if abs(side1.n - side2.n) in {1, len(side1.parent.sides) - 1}:
-                    return True
-
-            # Check connections via linked edges
-            for i in [side1.n, (side1.n + 1) % len(side1.parent.edges)]:#, (side1.n - 1) % len(side1.parent.edges)]:
-                for link in side1.parent.edges[i].links:
-                    if link and (link.parent.sides[(link.n) % len(link.parent.sides)] == side2 or link.parent.sides[(link.n - 1) % len(link.parent.sides)] == side2):
-                        return True
-
-            return False
-
-        def find_path(start_side):
-            """
-            Find all connected sides forming a single road.
-            
-            Args:
-                start_side: The starting side of the path.
-            
-            Returns:
-                list: The sides forming the path.
-            """
-            path = []
-            stack = [start_side]
-
-            while stack:
-                side = stack.pop()
-                if side in visited or side.value != p.tag:
-                    continue
-
-                visited.add(side)
-                if len(path) > 0:
-                    if path[-1].links != side:
-                        path.append(side)
                 else:
-                    path.append(side)
+                    if e1.links == e2:
+                        return True
+            # Check the reverse
+            if e2.links:
+                if isinstance(e2.links, list):
+                    if e1 in e2.links:
+                        return True
+                else:
+                    if e2.links == e1:
+                        return True
+            return False
 
-                # Add all connected sides to the stack
-                for neighbor in side.parent.sides:
-                    if neighbor not in visited and is_connected(side, neighbor):
-                        stack.append(neighbor)
-                
-                if side.links:
-                    for neighbor in side.links.parent.sides:
-                        if neighbor not in visited and is_connected(side, neighbor):
-                            stack.append(neighbor)
+        def get_endpoints(road):
+            """
+            Get the two endpoints (edge components) for a road segment.
+            For a road on a hex side, the endpoints are the two adjacent edges.
+            """
+            parent_hex = road.get_parent()
+            i = road.n
+            return (parent_hex.edges[i], parent_hex.edges[(i + 1) % len(parent_hex.edges)])
 
-            i = 1
-            final_path = [path[0]]
-            while i < len(path) - 1:
-                if is_connected(path[i], final_path[-1]):
-                    final_path.append(path[i])
-                i += 1
-            i2 = len(final_path) - 1
-            final_final_path = [final_path[-1]]
-            while i2 > -1:
-                if is_connected(final_path[i2], final_final_path[-1]):
-                    final_final_path.append(final_path[i2])
-                i2 -= 1
+        def endpoints_connected(eps1, eps2):
+            """
+            Return True if any endpoint in eps1 is connected (or identical) to any endpoint in eps2.
+            """
+            for e1 in eps1:
+                for e2 in eps2:
+                    if same_intersection(e1, e2):
+                        return True
+            return False
 
-            return final_final_path
+        def is_blocked(endpoints):
+            """
+            An endpoint is blocked if it has a structure placed by an opponent.
+            """
+            for ep in endpoints:
+                if ep.value is not None and ep.value != p.tag:
+                    return True
+            return False
 
-        # Identify distinct paths
-        paths = []
-        other_player_tags = [p_.tag for p_ in self.players if p_.tag != p.tag]
-        for side in p.roads:
-            visited = set()
-            if side not in visited and side.value == p.tag:
-                paths.append(find_path(side))
-                
+        # Gather all road segments (sides) that belong to the player.
+        road_segments = [road for road in p.roads if road.value == p.tag]
 
-        # Validate paths
-        valid_paths = []
-        for path in paths:
-            for s in path:
-                if s.links and s.links in path:
-                    path.remove(s.links)
-            if not is_negated(path, p, other_player_tags):
-                valid_paths.append(path)
+        # Build the connectivity graph.
+        graph = defaultdict(list)
+        for road in road_segments:
+            graph[road] = []
 
-        """
+        # Connect roads if they share a common (and unblocked) intersection.
+        for i, r1 in enumerate(road_segments):
+            eps1 = get_endpoints(r1)
+            for r2 in road_segments[i+1:]:
+                eps2 = get_endpoints(r2)
+                if endpoints_connected(eps1, eps2) and not (is_blocked(eps1) or is_blocked(eps2)):
+                    graph[r1].append(r2)
+                    graph[r2].append(r1)
 
-        # Output results
-        for i, path in enumerate(valid_paths):
-            print(f"Path {i + 1}: {[(hn_name(p.parent.coords), f'S{p.n + 1}') for p in path]}, length: {len(path)}")"""
+        # Also incorporate direct road connections via the .links attribute.
+        for r in road_segments:
+            links = r.links
+            if links:
+                if not isinstance(links, list):
+                    links = [links]
+                for linked in links:
+                    if linked and linked.value == p.tag:
+                        if linked not in graph[r]:
+                            graph[r].append(linked)
+                        if r not in graph[linked]:
+                            graph[linked].append(r)
 
-        return max([len(path) for path in valid_paths]) if len(valid_paths) > 0 else 0
+        # Depth-first search to find the longest path (in terms of road segments).
+        longest = 0
 
+        def dfs(node, visited, length):
+            nonlocal longest
+            longest = max(longest, length)
+            for neighbor in graph[node]:
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    dfs(neighbor, visited, length + 1)
+                    visited.remove(neighbor)
+
+        for road in road_segments:
+            dfs(road, {road}, 0)
+
+        return longest
     
     def place_struct(self, p, hn, pos, struct):
         """
@@ -382,6 +357,10 @@ class Board:
                             if edge.value == p.tag:
                                 if hex.biome.value and self.robber_loc != i:
                                     p_inv[hex.biome.value.value] += 1
+                    else:
+                        if edge.value == p.tag:
+                            if hex.biome.value and self.robber_loc != i:
+                                p_inv[hex.biome.value.value] += 1
                                 
         p.add_2_inv(p_inv)
         print(f"Given Player {p.name}: {p_inv[0]} Wood, {p_inv[1]} Brick, {p_inv[2]} Sheep, {p_inv[3]} Wheat")

@@ -4,6 +4,12 @@ import random
 import math
 from pygame.locals import *
 from PIL import Image
+import mini_catan
+import gymnasium as gym
+import numpy as np
+
+# Define Variable to hold Game Engine Instance
+game = None
 
 # Initialize Pygame
 pygame.init()
@@ -52,30 +58,22 @@ AI_TYPES = ["Random", "Weighted Random", "Reinforcement Learning"]
 
 # Resource Colors
 CLAY = (255, 0, 0)
-WHEAT = (255, 215, 0)
+SAND = (255, 215, 0)
 SHEEP = (124, 252, 0)
 WOOD = (0, 100, 0)
-SAND = (139, 69, 19)
+WHEAT = (139, 69, 19)
 
 music_muted = False
 dark_mode = False
 
-#other vars
-can_trade = True
-trade_choice = True
+# Other vars
 trade_overlay_active = False
+bank_trade = False
 
 # Trading data placeholders
 offer_input_boxes = []
 request_input_boxes = []
 trade_message = ""
-
-# Game Variables
-current_round = 1
-current_player = 1
-total_players = 4  # Adjust based on game settings
-victory_points = 0
-longest_road = ""
 
 # Resource Inventory
 resources = {
@@ -86,10 +84,8 @@ resources = {
 }
 
 # Structures Count
-player_settlements = 0
-total_settlements = 5  # Change as needed
-player_roads = 0
-total_roads = 10  # Change as needed
+total_settlements = 5
+total_roads = 10
 
 # Dice Roll
 current_dice = 0
@@ -112,8 +108,9 @@ TRADE_OVERLAY_Y = (WINDOW_HEIGHT // 2) - 150
 INVENTORY_BOX_X = 20  
 INVENTORY_BOX_Y = 20
 
-ROLL_DICE_BUTTON_POS = (20, 350, 140, 50)
-TRADE_BUTTON_POS = (WINDOW_WIDTH - 190, 650, 140, 50)
+END_ROUND_BUTTON_POS = (20, 370, 140, 50)
+TRADE_BUTTON_POS = (WINDOW_WIDTH - 180, 580, 140, 50)
+TRADE_BANK_BUTTON_POS = (WINDOW_WIDTH - 240, 650, 230, 50)
 EXIT_BUTTON_POS = (WINDOW_WIDTH - 190, 20, 180, 50)
 ACCEPT_TRADE_BUTTON_POS = (WINDOW_WIDTH // 2 - 180 - 90 - 60, 720, 200, 50)  
 REJECT_TRADE_BUTTON_POS = (WINDOW_WIDTH // 2 - 90, 720, 200, 50)  
@@ -124,71 +121,79 @@ DARK_MODE_POS = (WINDOW_WIDTH - 190, 160, 180, 50)
 
 # Adjusted Trade Input Boxes
 TRADE_INPUT_X_START = TRADE_OVERLAY_X + 50  
-TRADE_INPUT_Y_OFFER = TRADE_OVERLAY_Y + 80  
+TRADE_INPUT_Y_OFFER = TRADE_OVERLAY_Y + 80
 TRADE_INPUT_Y_REQUEST = TRADE_OVERLAY_Y + 140  
 TRADE_INPUT_WIDTH = 60  
 TRADE_INPUT_HEIGHT = 40  
 TRADE_BUTTON_SEND_POS = (TRADE_OVERLAY_X + 70, TRADE_OVERLAY_Y + 200, 160, 50)
 TRADE_CLOSE_BUTTON_POS = (TRADE_OVERLAY_X + 240, TRADE_OVERLAY_Y + 10, 100, 40)
 
-class Board:
+# Define player colors (adjust as desired)
+PLAYER_COLORS_SETTLEMENT = {
+    None: SETTLEMENT_COLOR,  # default color when unowned
+    0: (0, 0, 255),         # Blue for player 0
+    1: (255, 0, 0)          # Red for player 1
+}
+
+PLAYER_COLORS_ROAD = {
+    None: ROAD_COLOR,        # default color when unowned
+    0: (0, 0, 255),         # Blue for player 0
+    1: (255, 0, 0)          # Red for player 1
+}
+
+
+class GuiBoard:
     """Represents the game board."""
 
-    def __init__(self, size):
+    def __init__(self, size, colormap):
         self.hexes = []
-        self.settlements = []
-        self.roads = []
+        # Use fixed orders for settlements and roads to match engine indices
+        self.settlement_positions = [
+            (436, 188), (476, 257), (436, 327), (356, 327),
+            (316, 257), (356, 188), (316, 396), (236, 396),
+            (196, 327), (236, 257), (556, 257), (596, 327),
+            (556, 396), (476, 396), (436, 465), (356, 465),
+            (316, 535), (236, 535), (196, 465), (596, 465),
+            (556, 535), (476, 535), (436, 604), (356, 604)
+        ]
+        self.road_positions = [
+            (460, 227), (460, 296), (400, 331), (340, 296),
+            (340, 227), (400, 192), (340, 365), (280, 400),
+            (220, 365), (220, 296), (280, 261), (580, 296),
+            (580, 365), (520, 400), (460, 365), (520, 261),
+            (460, 435), (400, 469), (340, 435), (340, 504),
+            (280, 539), (220, 504), (220, 435), (580, 435),
+            (580, 504), (520, 539), (460, 504), (460, 573),
+            (400, 608), (340, 573)
+        ]
         self.size = size
+        self.tiles = colormap
 
-        self.tiles = [CLAY, WHEAT] * 3 + [WHEAT, SHEEP, WOOD] * 4 + [SAND]
-        random.shuffle(self.tiles)
-
+        # You can still create hexes for the board background
         self.center_x = screen.get_rect().centerx
         self.center_y = screen.get_rect().centery
-
         self.create_hexes()
+
+        # Create settlements and roads using the fixed positions
         self.create_settlements()
         self.create_roads()
 
-    def create_hexes(self):
-        """Creates hexagonal grid tiles."""
-        self.hexes.append(Hex((self.center_x, self.center_y), self.size, self.tiles[0]))
-        self.hexes.append(Hex((self.center_x, self.center_y - (2 * HEX_HEIGHT)), self.size, self.tiles[1]))
-        self.hexes.append(Hex((self.center_x, self.center_y + (2 * HEX_HEIGHT)), self.size, self.tiles[2]))
-        self.hexes.append(Hex((self.center_x - (1.5 * self.size), self.center_y - HEX_HEIGHT), self.size, self.tiles[3]))
-        self.hexes.append(Hex((self.center_x + (1.5 * self.size), self.center_y - HEX_HEIGHT), self.size, self.tiles[4]))
-        self.hexes.append(Hex((self.center_x - (1.5 * self.size), self.center_y + HEX_HEIGHT), self.size, self.tiles[5]))
-        self.hexes.append(Hex((self.center_x + (1.5 * self.size), self.center_y + HEX_HEIGHT), self.size, self.tiles[6]))
-
     def create_settlements(self):
-        """Generates settlement locations dynamically at hex corners."""
-        settlement_positions = set()  # Use a set to store unique settlements
-
-        for hexagon in self.hexes:
-            for point in hexagon.points:
-                # Ensure unique settlement positions
-                rounded_point = (round(point[0]), round(point[1]))  # Avoid float precision errors
-                settlement_positions.add(rounded_point)
-
-        self.settlements = [Settlement((pos[0] - 8 // 2, pos[1] - 8 // 2)) for pos in settlement_positions]  # Convert to Settlement objects
+        self.settlements = [Settlement(pos) for pos in self.settlement_positions]
 
     def create_roads(self):
-        """Generates road locations dynamically at hex edges."""
-        road_positions = set()  # Use a set to store unique roads
+        self.roads = [Road(pos) for pos in self.road_positions]
 
-        for hexagon in self.hexes:
-            for i in range(6):
-                # Calculate the midpoint of the current edge
-                p1 = hexagon.points[i]
-                p2 = hexagon.points[(i + 1) % 6]
-                midpoint = ((p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2)
-
-                # Round values to prevent floating point duplicates
-                rounded_midpoint = (round(midpoint[0]), round(midpoint[1]))
-
-                road_positions.add(rounded_midpoint)  # Add unique midpoint
-
-        self.roads = [Road(pos) for pos in road_positions]  # Convert to Road objects
+    def create_hexes(self):
+        """Creates hexagonal grid tiles."""
+        
+        self.hexes.append(Hex((self.center_x, self.center_y - (2 * HEX_HEIGHT)), self.size, self.tiles[0])) #H1
+        self.hexes.append(Hex((self.center_x - (1.5 * self.size), self.center_y - HEX_HEIGHT), self.size, self.tiles[1])) #H2
+        self.hexes.append(Hex((self.center_x + (1.5 * self.size), self.center_y - HEX_HEIGHT), self.size, self.tiles[2])) #H3
+        self.hexes.append(Hex((self.center_x, self.center_y), self.size, self.tiles[3])) #H4
+        self.hexes.append(Hex((self.center_x - (1.5 * self.size), self.center_y + HEX_HEIGHT), self.size, self.tiles[4])) #H5
+        self.hexes.append(Hex((self.center_x + (1.5 * self.size), self.center_y + HEX_HEIGHT), self.size, self.tiles[5])) #H6
+        self.hexes.append(Hex((self.center_x, self.center_y + (2 * HEX_HEIGHT)), self.size, self.tiles[6])) #H7
 
     def draw(self):
         """Draws the hexagons, settlements, and roads."""
@@ -198,6 +203,30 @@ class Board:
             road.draw()
         for settlement in self.settlements:
             settlement.draw()
+
+    def update_from_engine(self):
+        """
+        Update the owner for each settlement and road based on engine state.
+        Assumes:
+        - game.board.get_edges() returns a list of length 24 where 0 means unowned,
+            1 means player 0, 2 means player 1.
+        - game.board.get_sides() returns a list of length 30 with similar encoding.
+        """
+        # Retrieve current ownership from the engine
+        settlement_owners = game.board.get_edges()  # length should be 24
+        road_owners = game.board.get_sides()          # length should be 30
+
+        # Update settlements (using the same ordering as settlement_positions)
+        for i, settlement in enumerate(self.settlements):
+            # Convert the engine value to our internal owner index:
+            # (Assuming engine returns 0 for empty, and 1 for player 0, etc.)
+            owner = settlement_owners[i]
+            settlement.owner = None if owner == 0 else (owner - 1)
+
+        # Update roads similarly
+        for i, road in enumerate(self.roads):
+            owner = road_owners[i]
+            road.owner = None if owner == 0 else (owner - 1)
 
     def handle_mouse_hover(self, pos):
         """Handles hover effects on settlements and roads."""
@@ -210,59 +239,96 @@ class Board:
         """Handles mouse clicks on settlements and roads."""
         for settlement in self.settlements:
             if settlement.check_click(pos):
-                print(f"Settlement clicked at {settlement.position}")
+                idx = self._position_to_index(pos, 0)
+                if idx > -1:
+                    if game.board.turn_number > 0:
+                        game.step(1)
+                    print(f"Settlement clicked at {settlement.position} with pos {idx}")
+                    game.step(idx)
+                
         for road in self.roads:
             if road.check_click(pos):
-                print(f"Road clicked at {road.position}")
+                idx = self._position_to_index(pos, 1)
+                if idx > -1:
+                    if game.board.turn_number > 0:
+                        game.step(0)
+                    print(f"Road clicked at {road.position} with pos {idx}")
+                    game.step(idx)
+
+    def _position_to_index(self, pos, struct=None):
+        """Converts (x, y) position to an index (0-23) for the board placement."""
+        settlement_positions = [
+            (436, 188), (476, 257), (436, 327), (356, 327),
+            (316, 257), (356, 188), (316, 396), (236, 396),
+            (196, 327), (236, 257), (556, 257), (596, 327),
+            (556, 396), (476, 396), (436, 465), (356, 465),
+            (316, 535), (236, 535), (196, 465), (596, 465),
+            (556, 535), (476, 535), (436, 604), (356, 604)
+        ]
+        road_positions = [
+            (460, 227), (460, 296), (400, 331), (340, 296), (340, 227), (400, 192),
+            (340, 365), (280, 400), (220, 365), (220, 296), (280, 261), (580, 296),
+            (580, 365), (520, 400), (460, 365), (520, 261), (460, 435), (400, 469),
+            (340, 435), (340, 504), (280, 539), (220, 504), (220, 435), (580, 435),
+            (580, 504), (520, 539), (460, 504), (460, 573), (400, 608), (340, 573)
+        ]   
+        
+        tolerance = 10  # Tolerance to account for slight click inaccuracy
+
+        for index, (x, y) in enumerate(settlement_positions if struct < 1 else road_positions):
+            if abs(pos[0] - x) <= tolerance and abs(pos[1] - y) <= tolerance:
+                return index
+
+        return -1
 
 
 class Settlement:
     """Represents a settlement."""
-
     def __init__(self, position):
         self.position = position
-        self.color = SETTLEMENT_COLOR
+        self.owner = None  # No owner by default
         self.size = 16  # Square size
         self.valid = True
 
     def draw(self):
-        pygame.draw.rect(screen, self.color, (self.position[0], self.position[1], self.size, self.size))
+        # Use the player color if owned; otherwise, the default settlement color
+        color = PLAYER_COLORS_SETTLEMENT.get(self.owner, SETTLEMENT_COLOR)
+        pygame.draw.rect(screen, color, (self.position[0], self.position[1], self.size, self.size))
 
     def check_hover(self, pos):
         x, y = pos
         if math.dist((x, y), self.position) < self.size and self.valid:
-            self.color = HIGHLIGHT
-        else:
-            self.color = SETTLEMENT_COLOR
+            # Optionally, you might still want a hover highlight if unowned:
+            if self.owner is None:
+                self.hover_color = HIGHLIGHT
+            # (Alternatively, you can choose not to change color on hover once owned)
+        # No change of color here because ownership takes precedence.
 
     def check_click(self, pos):
         if self.valid:
             return math.dist(pos, self.position) < self.size
 
-
 class Road:
     """Represents a road."""
-    
     def __init__(self, position):
-        self.position = position  # Position of the road (midpoint of the edge)
-        self.color = ROAD_COLOR   # Default road color
-        self.size = 10            # Radius for hover and click detection
-        self.valid = True         # Whether the road can be interacted with
+        self.position = position  # Midpoint of the edge
+        self.owner = None  # No owner by default
+        self.size = 10   # Radius for detection
+        self.valid = True
 
     def draw(self):
-        """Draws a small circle to represent the road."""
-        pygame.draw.circle(screen, self.color, (int(self.position[0]), int(self.position[1])), self.size)
+        color = PLAYER_COLORS_ROAD.get(self.owner, ROAD_COLOR)
+        pygame.draw.circle(screen, color, (int(self.position[0]), int(self.position[1])), self.size)
 
     def check_hover(self, pos):
-        """Highlights the road when hovered over."""
+        # Hover logic can be similar or omitted if ownership is the primary display
         if self.valid and math.dist(pos, self.position) < self.size:
-            self.color = HIGHLIGHT
-        else:
-            self.color = ROAD_COLOR
+            # Optionally, draw a highlight (or you might simply ignore hover when owned)
+            pass
 
     def check_click(self, pos):
-        """Checks if the road is clicked."""
         return self.valid and math.dist(pos, self.position) < self.size
+
 
 
 
@@ -407,17 +473,44 @@ class InputBox:
             else:
                 self.text += event.unicode
                 
+def convert_biome_to_color(biome_array):
+    colormap = []
+    for b in biome_array:
+        match b:
+            case mini_catan.enums.Biome.FOREST:
+                colormap.append(WOOD)
+            case mini_catan.enums.Biome.HILLS:
+                colormap.append(CLAY)
+            case mini_catan.enums.Biome.FIELDS:
+                colormap.append(WHEAT)
+            case mini_catan.enums.Biome.PASTURE:
+                colormap.append(SHEEP)
+            case mini_catan.enums.Biome.DESERT:
+                colormap.append(SAND)
+            case _:
+                colormap.append(BLACK)
+
+    return colormap
 
 # Start Screen Functions
 def start_game_pvc():
-    global GAME_STATE
+    global GAME_STATE, game, settlers
     GAME_STATE = "GAME"
+    game = gym.make("MiniCatanEnv-v0")#, render_mode="human")
+    game.reset()
+    game.assign_main_player(0)
+    colormap = convert_biome_to_color(game.board.get_hex_biomes())
+    settlers = GuiBoard(HEX_SIZE, colormap)
     print(f"Starting Player vs Computer with AI type: {ai_dropdown.selected}")
 
 
 def start_game_cvc():
-    global GAME_STATE
+    global GAME_STATE, game, settlers
     GAME_STATE = "GAME"
+    game = gym.make("MiniCatanEnv-v0")#, render_mode=f"{ai_dropdown.selected}")
+    game.reset()
+    colormap = convert_biome_to_color(game.board.get_hex_biomes())
+    settlers = GuiBoard(HEX_SIZE, colormap)
     print(f"Starting Computer vs Computer with AI type: {ai_dropdown.selected}")
 
 
@@ -481,8 +574,9 @@ def create_trade_overlay():
 
 
 # Buttons for the trade and exit
-roll_dice_button = Button("Roll Dice", ROLL_DICE_BUTTON_POS, action=lambda: roll_dice())
+end_round_button = Button("End Turn", END_ROUND_BUTTON_POS, action=lambda: end_round())
 trade_button = Button("Trade", TRADE_BUTTON_POS, action=lambda: open_trade_overlay())
+trade_bank_button = Button("Trade with Bank", TRADE_BANK_BUTTON_POS, action=lambda: open_bank_trade_overlay())
 exit_button = Button("Exit", EXIT_BUTTON_POS, action=lambda: exit())
 accept_trade_button = Button("Accept Trade", ACCEPT_TRADE_BUTTON_POS, action=lambda: accept_trade())
 reject_trade_button = Button("Reject Trade", REJECT_TRADE_BUTTON_POS, action=lambda: reject_trade())
@@ -492,23 +586,18 @@ close_trade_button = Button("Close", TRADE_CLOSE_BUTTON_POS, action=lambda: clos
 game_mute_button = Button("Mute", GAME_MUTE_BUTTON_POS, action=lambda: toggle_music())
 dark_mode_button = Button("Toggle Dark", DARK_MODE_POS, action=lambda: toggle_dark())
 
-main_game_buttons = [trade_button, close_trade_button, reject_trade_button, 
-                     exit_button, accept_trade_button, send_trade_button, 
-                     counter_trade_button, game_mute_button, roll_dice_button, dark_mode_button
+main_game_buttons = [trade_button, trade_bank_button, close_trade_button, reject_trade_button, 
+                     exit_button, accept_trade_button, 
+                     counter_trade_button, game_mute_button, end_round_button, dark_mode_button
 ]
-settlers = Board(HEX_SIZE)
 
 def exit():
-    global GAME_STATE, can_trade, trade_choice, trade_overlay_active
+    global GAME_STATE, trade_overlay_active, game
     global offer_input_boxes, request_input_boxes, trade_message
-    global current_round, current_player, victory_points, current_dice, longest_road
-    global player_settlements, player_roads, resources
-    global settlers
+    global settlers, resources
 
     # Reset game state variables
     GAME_STATE = "START"
-    can_trade = True
-    trade_choice = False
     trade_overlay_active = False
 
     # Reset trading placeholders
@@ -516,31 +605,12 @@ def exit():
     request_input_boxes = []
     trade_message = ""
 
-    # Reset game variables
-    current_round = 1
-    current_player = 1
-    victory_points = 0
-    current_dice = 0
-    longest_road = ""
-
-    # Reset resource inventory
-    resources = {
-        "Clay": 0,
-        "Wheat": 0,
-        "Sheep": 0,
-        "Wood": 0
-    }
-
-    # Reset player structures
-    player_settlements = 0
-    player_roads = 0
-
     # Reset the game board
-    settlers = Board(HEX_SIZE)
+    game.reset()
     
 def toggle_music():
     """Toggles music on/off."""
-    global music_muted
+    global music_muted, SETTLEMENT_COLOR
     if music_muted:
         pygame.mixer.music.set_volume(0.5)  # Unmute (restore volume)
         music_muted = False
@@ -575,15 +645,24 @@ def toggle_dark():
 
 def open_trade_overlay():
     """Opens the trade overlay."""
-    global trade_overlay_active
+    global trade_overlay_active, bank_trade
     trade_overlay_active = True
+    bank_trade = False
+    create_trade_overlay()
+
+def open_bank_trade_overlay():
+    """Opens the trade overlay."""
+    global trade_overlay_active, bank_trade
+    trade_overlay_active = True
+    bank_trade = True
     create_trade_overlay()
 
 
 def close_trade_overlay():
     """Closes the trade overlay."""
-    global trade_overlay_active
+    global trade_overlay_active, bank_trade
     trade_overlay_active = False
+    bank_trade = False
 
 
 def send_trade():
@@ -591,6 +670,12 @@ def send_trade():
     global trade_message
     offer = [int(box.text) if box.text.isdigit() else 0 for box in offer_input_boxes]
     request = [int(box.text) if box.text.isdigit() else 0 for box in request_input_boxes]
+
+    if bank_trade:
+        game.step(3)
+    else:
+        game.step(2)
+    game.step(np.array([offer, request]))
 
     trade_message = f"Offer: {offer}, Request: {request}"
     print(trade_message)
@@ -600,33 +685,43 @@ def send_trade():
 def accept_trade():
     """Handles trade acceptance."""
     print("Trade accepted!")
-    global trade_choice
-    trade_choice = False
+    game.step(0)
 
 
 def reject_trade():
     """Handles trade rejection."""
     print("Trade rejected!")
-    global trade_choice
-    trade_choice = False
+    game.step(1)
     
-def roll_dice():
-    """Simulates rolling two dice and updates the current dice value."""
-    global current_dice
-    current_dice = random.randint(1, 6) + random.randint(1, 6)
-    print(f"Dice Rolled: {current_dice}")
+def end_round():
+    """Ends current player's turn"""
+    global current_dice, game
+    current_dice = game.dice_val
+    game.step(4)
+    print(f"Round Ended")
 
 def draw_inventory():
     """Draws the player's inventory and game state in the top-left corner."""
+    global game
+    current_player = game.current_player
+    current_round = game.board.turn_number
+    victory_points = game.board.players[game.main_player].vp
+    player_settlements = game.board.players[game.main_player].settlements
+    player_roads = game.board.players[game.main_player].roads
+    longest_road = game.board.get_longest_road_owner()
+    
+    inventory = game.board.players[game.main_player].inventory if current_round > 0 else [0,0,0,0]
+    resources.update(dict(zip(resources.keys(), inventory)))
     
     # Draw Game Stats
     stats = [
         f"Round: {current_round}",
-        f"VP: {victory_points}",
+        f"{"Your Turn!" if current_player == game.main_player else "Other Player's Turn!"}",
         f"Dice: {current_dice}",
-        f"Settlements: {player_settlements}/{total_settlements}",
-        f"Roads: {player_roads}/{total_roads}",
-        f"Longest Road: Player"
+        f"Longest Road: {longest_road}",
+        f"My VP: {victory_points}",
+        f"My Settlements: {len(player_settlements)}/{total_settlements}",
+        f"My Roads: {len(player_roads)}/{total_roads}"
     ]
     
     y_offset = INVENTORY_BOX_Y + 20
@@ -645,16 +740,17 @@ def draw_inventory():
     # Main Game Loop
 def main_game():
     """Runs the main game loop."""
-    global can_trade, trade_choice, trade_overlay_active
+    global trade_overlay_active
     create_trade_overlay()  # Initialize the trade overlay inputs
 
     while GAME_STATE == "GAME":
         screen.fill(WHITE)
+        settlers.update_from_engine()
         settlers.draw()
         
         # Draw Inventory
         draw_inventory()
-        roll_dice_button.draw()
+        end_round_button.draw()
 
         for event in pygame.event.get():
             if event.type == QUIT:
@@ -668,6 +764,7 @@ def main_game():
             elif event.type == MOUSEBUTTONDOWN:
                 if trade_overlay_active:
                     close_trade_button.check_click(event.pos)
+                    send_trade_button.check_click(event.pos)
                 else:
                     settlers.handle_mouse_click(event.pos)  # Only allow clicks when overlay is not active
                 for button in main_game_buttons:
@@ -678,10 +775,11 @@ def main_game():
                     box.handle_event(event)
 
         # Draw trade button if can_trade is True
-        if can_trade:
+        if game.board.turn_number > 0:
             trade_button.draw()
+            trade_bank_button.draw()
         # Draw trade choice buttons if trade_choice is True
-        if trade_choice:
+        if game.waiting_for_p_trade_followup_1 or game.waiting_for_p_trade_followup_2 or game.waiting_for_p_trade_followup_3:
             accept_trade_button.draw()
             reject_trade_button.draw()
             counter_trade_button.draw()

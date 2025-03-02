@@ -3,10 +3,10 @@ from gymnasium import spaces
 import numpy as np
 from mini_catan.Board import Board
 import random
-from mini_catan.enums import Biome, Resource, Structure, HexCompEnum
-from mini_catan.Hex import HexBlock
-from mini_catan.Player import Player
-from mini_catan.Die import Die
+from mini_catan.enums import Biome, Structure, HexCompEnum
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+from matplotlib.collections import PatchCollection
 
 # Reward variables
 S_max = 5
@@ -35,6 +35,53 @@ INITIATE_SETTLEMENT_REWARD = 0.3
 INITIATE_TRADE_BANK_REWARD = 0.1
 INITIATE_TRADE_PLAYER_REWARD = 0.15
 
+# Pixel positions for render function
+settlement_positions = [
+    (436, 188), (476, 257), (436, 327), (356, 327),
+    (316, 257), (356, 188), (316, 396), (236, 396),
+    (196, 327), (236, 257), (556, 257), (596, 327),
+    (556, 396), (476, 396), (436, 465), (356, 465),
+    (316, 535), (236, 535), (196, 465), (596, 465),
+    (556, 535), (476, 535), (436, 604), (356, 604)
+]
+
+road_positions = [
+    (460, 227), (460, 296), (400, 331), (340, 296),
+    (340, 227), (400, 192), (340, 365), (280, 400),
+    (220, 365), (220, 296), (280, 261), (580, 296),
+    (580, 365), (520, 400), (460, 365), (520, 261),
+    (460, 435), (400, 469), (340, 435), (340, 504),
+    (280, 539), (220, 504), (220, 435), (580, 435),
+    (580, 504), (520, 539), (460, 504), (460, 573),
+    (400, 608), (340, 573)
+]
+
+tile_polygons = [
+    [settlement_positions[i] for i in [0,1,2,3,4,5]], 
+    [settlement_positions[i] for i in [4,3,6,7,8,9]], 
+    [settlement_positions[i] for i in [10,11,12,13,2,1]], 
+    [settlement_positions[i] for i in [2,13,14,15,6,3]], 
+    [settlement_positions[i] for i in [6,15,16,17,18,7]], 
+    [settlement_positions[i] for i in [12,19,20,21,14,13]], 
+    [settlement_positions[i] for i in [14,21,22,23,16,15]]
+]
+
+# Dummy color maps for demonstration
+PLAYER_COLOR_MAP = {
+    0: "gray",    # unowned
+    1: "cyan",    # player 0
+    2: "fuchsia"      # player 1
+}
+
+# --- Define color maps for biomes and players ---
+BIOME_COLOR_MAP = {
+    Biome.DESERT:  "gold",
+    Biome.FOREST:  "darkgreen",
+    Biome.HILLS:   "red",
+    Biome.FIELDS:  "saddlebrown",
+    Biome.PASTURE: "limegreen",
+}
+
 class MiniCatanEnv(gym.Env):
     """Custom Gym Environment for Catan."""
     
@@ -45,7 +92,9 @@ class MiniCatanEnv(gym.Env):
         
         self.render_mode = render_mode # human, bot
         self.num_players = 2  # Modify based on your game setup
-        self.max_victory_points = 10
+        self.max_victory_points = 5
+
+        self.main_player = random.randint(0,1)
 
         self.board = Board(["P1", "P2"])
 
@@ -55,7 +104,6 @@ class MiniCatanEnv(gym.Env):
         
         # Define action space (e.g., 5 actions: Build Road, Build Settlement, Trade with Player, Trade with Bank, End Turn)
         self.action_space = spaces.Discrete(5)
-        
         
         self.build_settlement_action_space = spaces.Discrete(24)
 
@@ -70,7 +118,6 @@ class MiniCatanEnv(gym.Env):
         self.counter_counter_offer_action_space = spaces.Box(low=0, high=10, shape=(2, 4), dtype=np.int32)
         self.counter_counter_offer_reply_action_space =  spaces.Discrete(2) # 0: Yes, 1: No
 
-
         self.bank_trade_action_space = spaces.Box(low=0, high=10, shape=(2, 4), dtype=np.int32)
         
         # Define observation space (simplified example: resources, settlements, roads)
@@ -83,6 +130,12 @@ class MiniCatanEnv(gym.Env):
         "biomes": 5
         "hex_nums": 6 
         "robber_loc": 7
+        "turn_number": 8
+        "p_trade_followup_1": 9
+        "p_trade_followup_2": 10
+        "p_trade_followup_3": 11
+        "reply_to_offer": 12
+        "counter_sent": 13
         """
         self.obs_space_size = (
             (self.num_players * 4) +      # inventories
@@ -92,7 +145,13 @@ class MiniCatanEnv(gym.Env):
             (self.num_players) +          # victory_points
             (self.board.board_size) +     # biomes
             (self.board.board_size) +     # hex_nums
-            (1)                           # robber_loc
+            (1) +                         # robber_loc
+            (1) +                         # turn_number
+            (1) +                         # p_trade_followup_1
+            (1) +                         # p_trade_followup_2
+            (1) +                         # p_trade_followup_3
+            (1) +                         # reply_to_offer
+            (1)                           # counter_sent
         )
         self.observation_space = spaces.Box(low = 0, high = 20, shape=(self.obs_space_size, ), dtype=np.int32)
 
@@ -100,6 +159,9 @@ class MiniCatanEnv(gym.Env):
         # Initial state
         self.state = self._get_initial_state()
         self.current_player = 0
+
+    def assign_main_player(self, player):
+        self.main_player = player
 
     def _resouce_collection_round(self):
         self.dice_val = self.board.roll_dice()
@@ -135,6 +197,12 @@ class MiniCatanEnv(gym.Env):
             "biomes" : np.array([biome_num(b) for b in self.board.get_hex_biomes()]),
             "hex_nums" : np.array(self.board.get_hex_nums()),
             "robber_loc" : self.board.robber_loc,
+            "turn_number" : self.board.turn_number,
+            "p_trade_followup_1": self.waiting_for_p_trade_followup_1,
+            "p_trade_followup_2": self.waiting_for_p_trade_followup_2,
+            "p_trade_followup_3": self.waiting_for_p_trade_followup_3,
+            "reply_to_offer": self.reply_to_offer,
+            "counter_sent": self.counter_sent
         }
         return self._encode_observation(state)
     
@@ -147,7 +215,13 @@ class MiniCatanEnv(gym.Env):
             state["victory_points"].flatten(),  # Victory points
             state["biomes"].flatten(),  # Biomes
             state["hex_nums"].flatten(),  # Hex numbers
-            np.array([state["robber_loc"]])  # Robber location
+            np.array([state["robber_loc"]]),  # Robber location
+            np.array([state["turn_number"]]),  # Turn Number
+            np.array([state["p_trade_followup_1"]]),
+            np.array([state["p_trade_followup_2"]]),
+            np.array([state["p_trade_followup_3"]]),
+            np.array([state["reply_to_offer"]]),
+            np.array([state["counter_sent"]])
         ))
         return obs
     
@@ -237,7 +311,25 @@ class MiniCatanEnv(gym.Env):
         idx += self.board.board_size
         
         robber_loc = obs[idx]
-        
+        idx += 1
+
+        turn_number = obs[idx]
+        idx += 1
+
+        p_trade_followup_1 = obs[idx]
+        idx += 1
+
+        p_trade_followup_2 = obs[idx]
+        idx += 1
+
+        p_trade_followup_3 = obs[idx]
+        idx += 1
+
+        reply_to_offer = obs[idx]
+        idx += 1
+
+        counter_sent = obs[idx]
+
         return {
             "inventories": inventories,
             "edges": edges,
@@ -246,7 +338,13 @@ class MiniCatanEnv(gym.Env):
             "victory_points": victory_points,
             "biomes": biomes,
             "hex_nums": hex_nums,
-            "robber_loc": robber_loc
+            "robber_loc": robber_loc,
+            "turn_number": turn_number,
+            "p_trade_followup_1": p_trade_followup_1,
+            "p_trade_followup_2": p_trade_followup_2,
+            "p_trade_followup_3": p_trade_followup_3,
+            "reply_to_offer": reply_to_offer,
+            "counter_sent": counter_sent
         }
 
     def step(self, action):
@@ -260,7 +358,12 @@ class MiniCatanEnv(gym.Env):
         curr_player = self.board.players[self.current_player]
 
         if self.board.turn_number > 0:
-            if self.waiting_for_road_build_followup:
+            if action < 0:
+                print("Cancelling action and returning to action selection")
+                self._reset_followup_variables()
+                reward -= END_TURN_REWARD/2
+
+            elif self.waiting_for_road_build_followup:
                 assert self.build_road_action_space.contains(action), "Invalid Road Position"
 
                 for i,s in enumerate(self.board.all_sides):
@@ -388,22 +491,22 @@ class MiniCatanEnv(gym.Env):
                 assert self.action_space.contains(action), "Invalid Action"
                 
                 if action == 0:  # Build Road
-                    print("Player builds a road.")
+                    print("Player attemtps to build a road.")
                     self.waiting_for_road_build_followup = True
                     reward += INITIATE_ROAD_REWARD
 
                 elif action == 1:  # Build Settlement
-                    print("Player builds a settlement.")
+                    print("Player attemtps to build a settlement.")
                     self.waiting_for_settlement_build_followup = True
                     reward += INITIATE_SETTLEMENT_REWARD
 
                 elif action == 2:  # Trade with player
-                    print("Player initiates a trade with Player.")
+                    print("Player attemtps to initiate a trade with Player.")
                     self.waiting_for_p_trade_followup_1 = True
                     reward += INITIATE_TRADE_PLAYER_REWARD
 
                 elif action == 3:  # Trade with Bank
-                    print("Player initiates a trade with Bank.")
+                    print("Player attemtps to initiate a trade with Bank.")
                     self.waiting_for_b_trade_followup = True
                     reward += INITIATE_TRADE_BANK_REWARD
 
@@ -418,7 +521,7 @@ class MiniCatanEnv(gym.Env):
                     reward += INVENTORY_BALANCE_REWARD(curr_player.total_trades, np.array(curr_player.inventory)) #inventory balance penalty at end of turn
 
         else: 
-            #build set 1 and road 1 and then set 2 and road 2
+            # Build set 1 and road 1 and then set 2 and road 2
 
             if self.init_settlement_build and self.init_build < 4:
                 assert self.build_settlement_action_space.contains(action), "Invalid Settlement Position"
@@ -469,8 +572,14 @@ class MiniCatanEnv(gym.Env):
         obs["inventories"] = np.array(self.board.get_all_invs())
         obs["longest_road_owner"] = self.board.get_longest_road_owner()
         obs["robber_loc"] = self.board.robber_loc
+        obs["turn_number"] = self.board.turn_number
+        obs["p_trade_followup_1"] = self.waiting_for_p_trade_followup_1
+        obs["p_trade_followup_2"] = self.waiting_for_p_trade_followup_2
+        obs["p_trade_followup_3"] = self.waiting_for_p_trade_followup_3
+        obs["reply_to_offer"] = self.reply_to_offer
+        obs["counter_sent"] = self.counter_sent
 
-        if self.prev_longest_road_owner != self.board.get_longest_road_owner() and self.current_player == self.board.current_player:
+        if self.prev_longest_road_owner != self.board.get_longest_road_owner():
             reward += LONGEST_ROAD_REWARD
         self.prev_longest_road_owner = self.board.get_longest_road_owner()
 
@@ -488,18 +597,76 @@ class MiniCatanEnv(gym.Env):
         return self._encode_observation(obs), reward, done, trunc, info
 
     def render(self):
-        """Render the game state."""
-        if self.render_mode == "human":
-            print(f"Current Player: {self.current_player}")
-            print("inventories:", self.state["inventories"])
-            print("Map Edges:", self.state["edges"])
-            print("Map Sides:", self.state["sides"])
-            print("Victory Points:", self.state["victory_points"])
-            print(self.board.get_board_array())
+        fig, ax = plt.subplots(figsize=(10, 8))
+        
+        # Draw Hexes (tiles)
+        hex_biomes = self.board.get_hex_biomes()
+        hex_nums = self.board.get_hex_nums()
+        robber_loc = self.board.robber_loc
+        hex_patches = []
+        
+        # Build hex patches with a low zorder so they appear in the background.
+        for i, poly in enumerate(tile_polygons):
+            biome = hex_biomes[i]
+            color = BIOME_COLOR_MAP.get(biome, "white")
+            poly_patch = patches.Polygon(poly, closed=True, facecolor=color, edgecolor="black", lw=2, zorder=1)
+            hex_patches.append(poly_patch)
+        
+        # Add the hex patches collection to the axis.
+        ax.add_collection(PatchCollection(hex_patches, match_original=True, zorder=1))
+        
+        # Now, add tile numbers and robber marker on top (with higher zorder).
+        for i, poly in enumerate(tile_polygons):
+            xs, ys = zip(*poly)
+            center = (sum(xs)/len(xs), sum(ys)/len(ys))
+            ax.text(center[0], center[1], str(hex_nums[i]),
+                    ha="center", va="center", fontsize=14, color="white", weight="bold", zorder=3)
+            if i == robber_loc:
+                robber_patch = patches.RegularPolygon(center, numVertices=4, radius=20,
+                                                    orientation=0.785, color="black", zorder=2)
+                ax.add_patch(robber_patch)
+        
+        # Draw Settlements
+        edges = self.board.get_edges()
+        for idx, pos in enumerate(settlement_positions):
+            owner = edges[idx]
+            color = PLAYER_COLOR_MAP.get(owner, "gray")
+            size = 14
+            rect = patches.Rectangle((pos[0]-size/2, pos[1]-size/2), size, size,
+                                    facecolor=color, edgecolor="black", zorder=3)
+            ax.add_patch(rect)
+        
+        # Draw Roads
+        sides = self.board.get_sides()
+        for idx, pos in enumerate(road_positions):
+            owner = sides[idx]
+            color = PLAYER_COLOR_MAP.get(owner, "gray")
+            circle = patches.Circle(pos, radius=8, facecolor=color, edgecolor="black", zorder=3)
+            ax.add_patch(circle)
+        
+        # Draw an Inventory Box on the side
+        inventories = self.board.get_all_invs()
+        inv_box = patches.Rectangle((700, 150), 150, 300, facecolor="lightgray", edgecolor="black", zorder=3)
+        ax.add_patch(inv_box)
+        
+        # Write each player's inventory inside the box
+        y_text = 320
+        for player, inv in enumerate(inventories):
+            inv_lines = [f"{k}: {v}" for k, v in zip(["Wood", "Brick", "Sheep", "Wheat"], inv)]
+            inv_str = f"P{player+1}:\n" + "\n".join(inv_lines)
+            ax.text(710, y_text, inv_str, fontsize=10, verticalalignment="top", zorder=4)
+            y_text -= 100  # Adjust spacing for each player's info
+        
+        # Set display limits and hide axes for a cleaner look
+        ax.set_xlim(200, 900)
+        ax.set_ylim(0, 800)
+        ax.set_aspect("equal")
+        ax.axis("off")
+        ax.invert_yaxis()
+        
+        plt.show()
+
 
     def close(self):
         """Close any resources used by the environment."""
         pass
-
-
-    
