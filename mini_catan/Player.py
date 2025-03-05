@@ -15,7 +15,7 @@ class Player:
         self.name = name
         self.tag = name+str(random.randint(1, 6)) # Generate Unique tag for player
         # Inventory = number of [Wood, Brick, Sheep, Wheat]
-        self.inventory = [40, 40, 20, 20] # [0] * types_of_resources
+        self.inventory = [4, 4, 2, 2] # [0] * types_of_resources
         self.settlements = [] # List of settlements owned by the player
         self.roads = [] # List of roads owned by the player
         self.trades_rejected = 0

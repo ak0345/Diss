@@ -1,122 +1,199 @@
 import numpy as np
-import random
-from gymnasium import spaces
 
 class RandomAgent:
-    def __init__(self, seed=42):
-        print("I am a random agent")
-        
-        np.random.seed(seed)
-
-        self.action_space = spaces.Discrete(5)
-        self.action_space_curr = None
-        
-        self.build_settlement_action_space = spaces.Discrete(24)
-
-        self.build_road_action_space = spaces.Discrete(30)
-
-        self.player_trade_action_space = spaces.Box(low=0, high=3, shape=(2, 4), dtype=np.int32)
-
-        self.player_trade_offer_request_action_space = spaces.Discrete(3) # 0: Yes, 1: No, 2: Counter
-
-        self.counter_offer_action_space = spaces.Box(low=0, high=3, shape=(2, 4), dtype=np.int32)
-
-        self.counter_offer_response_action_space = spaces.Discrete(3) # 0: Yes, 1: No, 2: Counter the Counter
-
-        self.counter_counter_offer_action_space = spaces.Box(low=0, high=3, shape=(2, 4), dtype=np.int32)
-
-        self.counter_counter_offer_reply_action_space =  spaces.Discrete(2) # 0: Yes, 1: No
-
-        self.bank_trade_action_space = spaces.Box(low=0, high=3, shape=(2, 4), dtype=np.int32)
-
-        self.attempts = 0
+    """
+    A simple random agent for MiniCatan.
     
-    def act(self, observation):
+    This agent inspects the observation’s trade followup flags (and turn number)
+    to decide which action space to sample from. In particular:
+    
+      - If bank trade followup is active, it returns a valid random 2x4 integer array
+        in [0, 10) (using only the agent's own inventory to limit the offered resources).
+      - If player trade followup (stage 1) is active:
+            • If a reply is expected, it returns a random integer in {0,1,2} 
+            • Otherwise (or if a counter offer was sent) it returns a valid random 2x4 array,
+              ensuring that the requested resources do not exceed the other player's inventory.
+      - If player trade followup stage 2 is active, it returns a random integer in {0,1,2}.
+      - If player trade followup stage 3 is active:
+            • If a reply is expected, it returns a random integer in {0,1}
+            • Else it returns a valid random 2x4 array (again checking the other player's inventory).
+      - Otherwise, if it’s the initial build phase (turn_number==0), it randomly chooses between:
+            • A settlement build action (an integer in [0, 24))
+            • A road build action (an integer in [0, 30))
+      - In all other cases (normal phase) it samples a random main action (an integer in [0, 5)).
+      
+    To avoid repeatedly trying unaffordable moves (e.g. trading when lacking resources
+    or building when insufficient), the agent keeps track of consecutive failed attempts.
+    If too many invalid actions have been tried, it returns a cancellation move (-1)
+    to cancel the current move. On the next call, it then returns a safe action (e.g., End Turn).
+    
+    Note:
+      The observation is expected to be a flat numpy array with the following layout:
+        - Indices 0-7: inventories for 2 players (each with 4 resources: Wood, Brick, Sheep, Wheat)
+          * For player 0, indices 0-3; for player 1, indices 4-7.
+        - Index 80: turn_number
+        - Indices 81-86: trade followup flags, where:
+              81: b_trade_followup
+              82: p_trade_followup_1
+              83: p_trade_followup_2
+              84: p_trade_followup_3
+              85: reply_to_offer
+              86: counter_sent
+    """
+    
+    def __init__(self, player_index=0):
+        self.attempts = 0
+        self.attempt_threshold = 5  # After 5 failed attempts, cancel the move.
+        self.cancel_next = False    # Flag to return a safe action on the next call.
+        self.player_index = player_index  # 0 or 1
+
+    def _get_inventory(self, obs):
+        # For 2 players (each with 4 resources): indices 0-3 for player 0, 4-7 for player 1.
+        start = self.player_index * 4
+        return obs[start:start+4]
+    
+    def _get_other_inventory(self, obs):
+        # Returns the other player's inventory.
+        obs = np.array(obs)
+        if self.player_index == 0:
+            return obs[4:8]
+        else:
+            return obs[0:4]
+    
+    def _generate_valid_trade_action(self, inventory, other_inv=None):
         """
-        Select an action based on the current observation and turn number.
+        Generates a trade action (a 2x4 array) for bank or player trades.
         
-        The observation is expected to be a dictionary that contains trade state flags.
-        Depending on the trade sub-state, a corresponding action space is used.
-        If no trade is in progress, the agent falls back to its base action selection.
+        For the offered resources, it ensures that the agent doesn't offer more than it can afford.
+        For the requested resources (if other_inv is provided, i.e. for player trades), it ensures
+        that the request does not exceed what the other player currently has.
+        
+        For each resource, we assume that the cost for the offered amount is twice its value.
         """
-        # Check if we are in a trade sequence:
-        if observation[9] == 1: # p_trade_followup_1
-            # In the initial trade follow-up state:
-            if observation[12] == 1: # reply_to_offer
-                # Environment expects a reply to the trade offer (accept/reject/counter)
-                return self.player_trade_offer_request_action_space.sample()
-            elif observation[13] == 1: # counter_sent
-                # We already sent a counter offer; now pick a counter offer action
-                return self.counter_offer_action_space.sample()
+        # Check if the agent can afford at least one resource.
+        if not np.any(inventory >= 2):
+            return -1  # Cancel move if no resource is affordable.
+        
+        offer = np.zeros(4, dtype=np.int32)
+        for i in range(4):
+            # Maximum that can be offered is inventory[i] // 2.
+            max_offer = (inventory[i] // 2) if inventory[i] >= 2 else 0
+            if max_offer > 0:
+                # Start at 1 so that 0 is never chosen.
+                offer[i] = np.random.randint(1, min(10, max_offer + 1))
             else:
-                # Otherwise, initiate the trade offer
-                return self.player_trade_action_space.sample()
+                offer[i] = 0
         
-        elif observation[10] == 1: # p_trade_followup_2
-            # In the follow-up state after a counter offer has been sent,
-            # respond with Yes/No/Counter (e.g., accept, reject, or counter the counter)
-            return self.counter_offer_response_action_space.sample()
+        # Ensure that at least one resource is offered.
+        if not np.any(offer > 0):
+            for i in range(4):
+                if inventory[i] >= 2:
+                    offer[i] = 1
+                    break
+
+        # For the request, if other_inv is provided (i.e. for a player trade),
+        # limit each requested amount by the other player's available resources.
+        if other_inv is not None:
+            if not np.any(other_inv > 0):
+                return -1  # Cancel move if opponent has nothing to trade.
+            request = np.zeros(4, dtype=np.int32)
+            for i in range(4):
+                max_req = other_inv[i]
+                if max_req > 0:
+                    request[i] = np.random.randint(1, min(10, max_req + 1))
+                else:
+                    request[i] = 0
+            if not np.any(request > 0):
+                for i in range(4):
+                    if other_inv[i] > 0:
+                        request[i] = 1
+                        break
+        else:
+            request = np.random.randint(0, 10, size=4, dtype=np.int32)
         
-        elif observation[11] == 1: # p_trade_followup_3
-            # In the final trade follow-up stage:
-            if observation[12] == 1: # reply_to_offer
-                # Respond to a counter-counter offer
-                return self.counter_counter_offer_reply_action_space.sample()
+        return np.stack([offer, request])
+    
+    def act(self, obs):
+        # Ensure obs is a numpy array.
+        obs = np.array(obs)
+        
+        # If a cancellation was signaled from the previous attempt, now return a safe action.
+        if self.cancel_next:
+            self.cancel_next = False
+            self.attempts = 0
+            # Safe action: End Turn (action 4) in the main action space.
+            return 4
+        
+        # Increment our attempt counter.
+        self.attempts += 1
+        if self.attempts >= self.attempt_threshold:
+            # Cancel the move.
+            self.cancel_next = True
+            self.attempts = 0
+            return -1
+        
+        # Decode key values from the observation.
+        turn_number         = int(obs[80])
+        b_trade_followup    = int(obs[81])
+        p_trade_followup_1  = int(obs[82])
+        p_trade_followup_2  = int(obs[83])
+        p_trade_followup_3  = int(obs[84])
+        reply_to_offer      = int(obs[85])
+        counter_sent        = int(obs[86])
+        
+        # Extract the agent's current inventory.
+        inventory = self._get_inventory(obs)
+        
+        # Trade followup branches.
+        if b_trade_followup:
+            # Bank trade: ensure we can offer something.
+            action = self._generate_valid_trade_action(inventory, other_inv=None)
+            return action
+        
+        elif p_trade_followup_1:
+            if reply_to_offer:
+                # Reply to offer: action is Discrete(3).
+                return np.random.randint(0, 3)
             else:
-                # Otherwise, send a counter-counter offer
-                return self.counter_counter_offer_action_space.sample()
+                # Player trade offer: include check on the other player's inventory.
+                other_inventory = self._get_other_inventory(obs)
+                action = self._generate_valid_trade_action(inventory, other_inv=other_inventory)
+                return action
         
-        # If not in any trade follow-up stage, follow the base action selection:
-        if observation[8] > 0: # turn_number
-            if self.action_space_curr is None:
-                self.action_space_curr = self.action_space.sample()
-                # If the agent decides to end its turn (action 4), reset for next turn.
-                if self.action_space_curr == 4:  # End Turn
-                    temp = self.action_space_curr
-                    self.action_space_curr = None
-                    return temp
-                return self.action_space_curr
-            
-            elif self.action_space_curr == 0:
-                # Build road action
-                if self.attempts < 10:
-                    self.attempts += 1
-                else:
-                    self.attempts = 0
-                    self.action_space_curr = None
-                    return -1  # Indicates failure after many attempts
-                return self.build_road_action_space.sample()
-            
-            elif self.action_space_curr == 1:
-                # Build settlement action
-                if self.attempts < 10:
-                    self.attempts += 1
-                else:
-                    self.attempts = 0
-                    self.action_space_curr = None
-                    return -1
-                return self.build_settlement_action_space.sample()
-            
-            elif self.action_space_curr == 2:
-                # Initiate player trade
-                if self.attempts < 10:
-                    self.attempts += 1
-                else:
-                    self.attempts = 0
-                    self.action_space_curr = None
-                    return -1
-                return self.player_trade_action_space.sample()
-            
-            elif self.action_space_curr == 3:
-                # Bank trade action
-                if self.attempts < 10:
-                    self.attempts += 1
-                else:
-                    self.attempts = 0
-                    self.action_space_curr = None
-                    return -1
-                return self.bank_trade_action_space.sample()
+        elif p_trade_followup_2:
+            # Counter offer response: action is Discrete(3).
+            return np.random.randint(0, 3)
+        
+        elif p_trade_followup_3:
+            if reply_to_offer:
+                # Counter counter offer reply: action is Discrete(2).
+                return np.random.randint(0, 2)
+            else:
+                # Player counter counter offer: include other player's inventory check.
+                other_inventory = self._get_other_inventory(obs)
+                action = self._generate_valid_trade_action(inventory, other_inv=other_inventory)
+                return action
         
         else:
-            # On turn 0, simply try a road build action.
-            return self.build_road_action_space.sample()
+            # Not in any trade followup state.
+            if turn_number == 0:
+                # During initial build phase, randomly choose between a settlement action (Discrete(24))
+                # and a road action (Discrete(30)). We assume initial builds are free.
+                if np.random.rand() < 0.5:
+                    return np.random.randint(0, 24)
+                else:
+                    return np.random.randint(0, 30)
+            else:
+                # Normal turn: sample from the main action space (Discrete(5)).
+                action = np.random.randint(0, 5)
+                # For building actions, check that we have enough resources.
+                # Assume a road costs [1, 1, 0, 0] (Wood, Brick) and a settlement costs [1, 1, 1, 1].
+                if action == 0:
+                    # Build Road.
+                    if inventory[0] < 1 or inventory[1] < 1:
+                        return -1  # Cancel move.
+                elif action == 1:
+                    # Build Settlement.
+                    if np.any(inventory < np.array([1, 1, 1, 1])):
+                        return -1  # Cancel move.
+                return action

@@ -101,6 +101,7 @@ class MiniCatanEnv(gym.Env):
         self.prev_longest_road_owner = self.board.get_longest_road_owner()
 
         self._reset_followup_variables()
+        self.trade_initiator = None
         
         # Define action space (e.g., 5 actions: Build Road, Build Settlement, Trade with Player, Trade with Bank, End Turn)
         self.action_space = spaces.Discrete(5)
@@ -147,6 +148,7 @@ class MiniCatanEnv(gym.Env):
             (self.board.board_size) +     # hex_nums
             (1) +                         # robber_loc
             (1) +                         # turn_number
+            (1) +                         # b_trade_followup
             (1) +                         # p_trade_followup_1
             (1) +                         # p_trade_followup_2
             (1) +                         # p_trade_followup_3
@@ -198,6 +200,7 @@ class MiniCatanEnv(gym.Env):
             "hex_nums" : np.array(self.board.get_hex_nums()),
             "robber_loc" : self.board.robber_loc,
             "turn_number" : self.board.turn_number,
+            "b_trade_followup" : self.waiting_for_b_trade_followup,
             "p_trade_followup_1": self.waiting_for_p_trade_followup_1,
             "p_trade_followup_2": self.waiting_for_p_trade_followup_2,
             "p_trade_followup_3": self.waiting_for_p_trade_followup_3,
@@ -217,6 +220,7 @@ class MiniCatanEnv(gym.Env):
             state["hex_nums"].flatten(),  # Hex numbers
             np.array([state["robber_loc"]]),  # Robber location
             np.array([state["turn_number"]]),  # Turn Number
+            np.array([state["b_trade_followup"]]), # Bank trade
             np.array([state["p_trade_followup_1"]]),
             np.array([state["p_trade_followup_2"]]),
             np.array([state["p_trade_followup_3"]]),
@@ -230,7 +234,6 @@ class MiniCatanEnv(gym.Env):
         self.init_settlement_build = True
         self.init_road_build = False
         self.init_build = 0
-        self.waiting_for_followup = False
         self.waiting_for_settlement_build_followup = False
         self.waiting_for_road_build_followup = False
         self.waiting_for_b_trade_followup = False
@@ -316,6 +319,9 @@ class MiniCatanEnv(gym.Env):
         turn_number = obs[idx]
         idx += 1
 
+        b_trade_followup = obs[idx]
+        idx += 1
+
         p_trade_followup_1 = obs[idx]
         idx += 1
 
@@ -340,6 +346,7 @@ class MiniCatanEnv(gym.Env):
             "hex_nums": hex_nums,
             "robber_loc": robber_loc,
             "turn_number": turn_number,
+            "b_trade_followup": b_trade_followup,
             "p_trade_followup_1": p_trade_followup_1,
             "p_trade_followup_2": p_trade_followup_2,
             "p_trade_followup_3": p_trade_followup_3,
@@ -358,10 +365,29 @@ class MiniCatanEnv(gym.Env):
         curr_player = self.board.players[self.current_player]
 
         if self.board.turn_number > 0:
-            if action < 0:
+            if type(action) == int and action < 0:
                 print("Cancelling action and returning to action selection")
                 self._reset_followup_variables()
-                reward -= END_TURN_REWARD/2
+                # If a trade dialogue was in progress, revert to the trade initiator.
+                if self.trade_initiator is not None:
+                    self.current_player = self.trade_initiator
+                    self.trade_initiator = None
+                reward -= END_TURN_REWARD / 2
+                obs = self._decode_observation(self.state)
+                obs["edges"] = np.array(self.board.get_edges())
+                obs["sides"] = np.array(self.board.get_sides())
+                obs["victory_points"] = np.array(self.board.get_vp())
+                obs["inventories"] = np.array(self.board.get_all_invs())
+                obs["longest_road_owner"] = self.board.get_longest_road_owner()
+                obs["robber_loc"] = self.board.robber_loc
+                obs["turn_number"] = self.board.turn_number
+                obs["b_trade_followup"] = self.waiting_for_b_trade_followup
+                obs["p_trade_followup_1"] = self.waiting_for_p_trade_followup_1
+                obs["p_trade_followup_2"] = self.waiting_for_p_trade_followup_2
+                obs["p_trade_followup_3"] = self.waiting_for_p_trade_followup_3
+                obs["reply_to_offer"] = self.reply_to_offer
+                obs["counter_sent"] = self.counter_sent
+                return self._encode_observation(obs), reward, done, trunc, info
 
             elif self.waiting_for_road_build_followup:
                 assert self.build_road_action_space.contains(action), "Invalid Road Position"
@@ -412,7 +438,7 @@ class MiniCatanEnv(gym.Env):
                     elif action == 1:
                         self.current_player = (self.current_player + 1) % self.num_players
                         self.waiting_for_p_trade_followup_1 = False
-                        reward += REJECTED_TRADE_REWARD(self.current_player.trades_rejected) # trade rejected
+                        reward += REJECTED_TRADE_REWARD(self.board.players[self.current_player].trades_rejected) # trade rejected
                         
                     elif action == 2:
                         self.counter_sent = True
@@ -449,8 +475,8 @@ class MiniCatanEnv(gym.Env):
                     assert trade, "Cannot Afford Trade"
                 elif action == 1:
                     #end trade
-                    self.current_player.trades_rejected += 1
-                    reward += COUTNER_OFFER_REJECTED_REWARD(self.current_player.trades_rejected)
+                    self.board.players[self.current_player].trades_rejected += 1
+                    reward += COUTNER_OFFER_REJECTED_REWARD(self.board.players[self.current_player].trades_rejected)
                 elif action == 2:
                     self.waiting_for_p_trade_followup_3 = True
                     reward += TRADE_PLAYER_REWARD(self.offer[1] - self.offer[0]) # countering a bad trade
@@ -469,8 +495,8 @@ class MiniCatanEnv(gym.Env):
                         
                     elif action == 1:
                         self.current_player = (self.current_player + 1) % self.num_players
-                        self.current_player.trades_rejected += 1
-                        reward += COUTNER_OFFER_REJECTED_REWARD(self.current_player.trades_rejected) # trade rejected twice
+                        self.board.players[self.current_player].trades_rejected += 1
+                        reward += COUTNER_OFFER_REJECTED_REWARD(self.board.players[self.current_player].trades_rejected) # trade rejected twice
 
                     self.reply_to_offer = False
                     self.waiting_for_p_trade_followup_3 = False
@@ -503,6 +529,7 @@ class MiniCatanEnv(gym.Env):
                 elif action == 2:  # Trade with player
                     print("Player attemtps to initiate a trade with Player.")
                     self.waiting_for_p_trade_followup_1 = True
+                    self.trade_initiator = self.current_player
                     reward += INITIATE_TRADE_PLAYER_REWARD
 
                 elif action == 3:  # Trade with Bank
@@ -573,6 +600,7 @@ class MiniCatanEnv(gym.Env):
         obs["longest_road_owner"] = self.board.get_longest_road_owner()
         obs["robber_loc"] = self.board.robber_loc
         obs["turn_number"] = self.board.turn_number
+        obs["b_trade_followup"] = self.waiting_for_b_trade_followup
         obs["p_trade_followup_1"] = self.waiting_for_p_trade_followup_1
         obs["p_trade_followup_2"] = self.waiting_for_p_trade_followup_2
         obs["p_trade_followup_3"] = self.waiting_for_p_trade_followup_3
