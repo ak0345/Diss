@@ -674,16 +674,18 @@ class MiniCatanEnv(gym.Env):
         
         # Draw an Inventory Box on the side
         inventories = self.board.get_all_invs()
-        inv_box = patches.Rectangle((700, 150), 150, 300, facecolor="lightgray", edgecolor="black", zorder=3)
+        inv_box = patches.Rectangle((650, 200), 250, 300, facecolor="lightgray", edgecolor="black", zorder=3)
         ax.add_patch(inv_box)
         
         # Write each player's inventory inside the box
         y_text = 320
+        inv_str = f"Longest Road Owner: {self.board.get_longest_road_owner()-1} \n"
         for player, inv in enumerate(inventories):
             inv_lines = [f"{k}: {v}" for k, v in zip(["Wood", "Brick", "Sheep", "Wheat"], inv)]
-            inv_str = f"P{player+1}:\n" + "\n".join(inv_lines)
-            ax.text(710, y_text, inv_str, fontsize=10, verticalalignment="top", zorder=4)
+            inv_str = inv_str + f"P{player}:\n" + "\n".join(inv_lines)
+            ax.text(660, y_text, inv_str, fontsize=10, verticalalignment="top", zorder=4)
             y_text -= 100  # Adjust spacing for each player's info
+            inv_str = ""
         
         # Set display limits and hide axes for a cleaner look
         ax.set_xlim(200, 900)

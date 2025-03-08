@@ -1,6 +1,14 @@
 import numpy as np
 
-class RandomAgent:
+# Probabilities for action
+SETTLEMENT = 0.5
+ROAD = SETTLEMENT + 0.3
+BANK = SETTLEMENT + ROAD + 0.05
+PLAYER = SETTLEMENT + ROAD + BANK + 0.15
+
+import numpy as np
+
+class RandomAgentV2:
     """
     A simple random agent for MiniCatan.
     """
@@ -98,6 +106,10 @@ class RandomAgent:
             return -1
         
         # Decode key values from the observation.
+        idx = 8
+        edges = obs[idx:(idx + 24)].reshape(24, )
+        idx += 24
+        sides = obs[idx:(idx + 30)].reshape(30, )
         turn_number         = int(obs[80])
         b_trade_followup    = int(obs[81])
         p_trade_followup_1  = int(obs[82])
@@ -156,7 +168,17 @@ class RandomAgent:
                     return np.random.randint(0, 30)
             else:
                 # Normal turn: sample from the main action space (Discrete(5)).
-                self.action = np.random.randint(0, 5)
+                p = np.random.rand()
+                if p < SETTLEMENT:
+                    self.action = 0
+                elif p < ROAD:
+                    self.action = 1
+                elif p < BANK:
+                    self.action = 2
+                elif p < PLAYER:
+                    self.action = 3
+                else:
+                    self.action = 4
                 # For building actions, check that we have enough resources.
                 # Assume a road costs [1, 1, 0, 0] (Wood, Brick) and a settlement costs [1, 1, 1, 1].
                 if self.action == 0:
