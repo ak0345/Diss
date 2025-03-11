@@ -4,10 +4,10 @@ import gymnasium as gym
 import numpy as np
 import traceback
 import pandas as pd
+import os
 
-# Create and reset the environment.
-game = gym.make("MiniCatanEnv-v0")
-game.reset()
+# Create folder for game logs if it doesn't exist.
+os.makedirs("games", exist_ok=True)
 
 print("Choose game mode:")
 print("1. Human vs Agent")
@@ -63,66 +63,44 @@ else:
     print("Invalid mode selection; defaulting to Human vs Human")
     agents = [None, None]
 
-print("Type any valid command (e.g., game.step(2), game.render()) or 'exit' to quit.")
-
-# Print a quick summary of the selected mode.
-print("Game mode selected:")
-if agents[0] is None and agents[1] is None:
-    print("Human vs Human")
-elif agents[0] is None and agents[1] is not None:
-    print("Human vs Agent")
-elif agents[0] is not None and agents[1] is None:
-    print("Agent vs Human")
-else:
-    print("Agent vs Agent")
-
-# Ask if we want to record actions.
-record_choice = input("Record actions to CSV? (y/n): ").strip().lower()
-record_csv = (record_choice == "y")
-# Prepare an empty list to store log data.
-log_data = []
-action_id = 0
-
-obs, reward, done, trunc, info = None, None, None, None, None
-ep = 0
-
-# Main game loop.
-game.reset()
-while True:
-    # Determine which player's turn it is.
-    current_player_idx = game.current_player  # assume index 0 or 1
-    current_agent = agents[current_player_idx]
-
-    if done == True:
-        winner = current_player_idx + 1  # human-readable winner (1-indexed)
-        print(f"Player {winner} wins!")
-        game.render()
-        # Log the terminal move.
-        log_data.append({
-            "id": action_id,
-            "obs": obs.tolist() if obs is not None else None,
-            "action": move,
-            "reward": reward,
-            "winner": winner,
-            "current_player": current_player_idx
-        })
-        break
-
-    elif current_agent is None:
-        # Human player's turn: prompt for a command.
-        user_command = input(">>> ")
-        if user_command.strip().lower() == "exit":
-            break
-        try:
-            result = eval(user_command)
-            if result is not None:
-                print(result)
-        except Exception as e:
-            print("Error:", e)
+# If not in Agent vs Agent mode, run interactively.
+if mode != "2":
+    print("Type any valid command (e.g., game.step(2), game.render()) or 'exit' to quit.")
+    print("Game mode selected:")
+    if agents[0] is None and agents[1] is None:
+        print("Human vs Human")
+    elif agents[0] is None and agents[1] is not None:
+        print("Human vs Agent")
+    elif agents[0] is not None and agents[1] is None:
+        print("Agent vs Human")
     else:
-        # Agent player's turn.
-        print(f"Agent for player {current_player_idx} running turn......")
-        while True:
+        print("Agent vs Agent")
+    
+    # Create and reset the environment.
+    game = gym.make("MiniCatanEnv-v0")
+    game = game.unwrapped
+    game.reset()
+    obs, reward, done, trunc, info = None, None, None, None, None
+    while True:
+        current_player_idx = game.current_player  # index 0 or 1
+        current_agent = agents[current_player_idx]
+        if done == True:
+            winner = current_player_idx + 1
+            print(f"Player {winner} wins!")
+            #game.render()
+            break
+        elif current_agent is None:
+            user_command = input(">>> ")
+            if user_command.strip().lower() == "exit":
+                break
+            try:
+                result = eval(user_command)
+                if result is not None:
+                    print(result)
+            except Exception as e:
+                print("Error:", e)
+        else:
+            print(f"Agent for player {current_player_idx} running turn......")
             try:
                 if obs is not None:
                     move = current_agent.act(obs)
@@ -131,12 +109,43 @@ while True:
                 print("Agent move:", move)
                 obs, reward, done, trunc, info = game.step(move)
                 print(obs)
-                ep += 1
-                if ep == 10000:
-                    ep = 0
-                    game.render()
+            except AssertionError as e:
+                traceback.print_exc()
 
-                # Log the move.
+# If Agent vs Agent mode, run n simulations and record logs.
+else:
+    n_games = int(input("Enter number of games to simulate: ").strip())
+    for game_idx in range(1, n_games+1):
+        print(f"\n=== Starting simulation game {game_idx} ===")
+        game = gym.make("MiniCatanEnv-v0")
+        game = game.unwrapped
+        game.reset()
+        log_data = []
+        action_id = 0
+        obs, reward, done, trunc, info = None, None, None, None, None
+
+        # Run the game simulation until it terminates.
+        while True:
+            current_player_idx = game.current_player  # index 0 or 1
+            current_agent = agents[current_player_idx]
+
+            if done == True:
+                winner = current_player_idx + 1  # 1-indexed winner.
+                print(f"Game {game_idx}: Player {winner} wins!")
+                #game.render()
+                log_data.append({
+                    "id": action_id,
+                    "obs": obs.tolist() if obs is not None else None,
+                    "action": move,
+                    "reward": reward,
+                    "winner": winner,
+                    "current_player": current_player_idx
+                })
+                break
+
+            #  End Game as a Stalemate if lasts more than 1000 turns or 50000 correct/incorrect moves
+            elif game.board.turn_number > 1500:
+                print(f"Game {game_idx}: Stalemate/Draw")
                 log_data.append({
                     "id": action_id,
                     "obs": obs.tolist() if obs is not None else None,
@@ -145,14 +154,32 @@ while True:
                     "winner": -1,
                     "current_player": current_player_idx
                 })
-                action_id += 1
                 break
+
+            # Since we are in agent vs agent mode, there is no human input.
+            try:
+                if obs is not None:
+                    move = current_agent.act(obs)
+                else:
+                    move = current_agent.act(game.state)
+                print(f"Game {game_idx}, Player {current_player_idx} move: {move}, Turn: {game.board.turn_number}")
+                obs, reward, done, trunc, info = game.step(move)
+                # Log the move.
+                log_data.append({
+                    "id": action_id,
+                    "obs": obs.tolist() if obs is not None else None,
+                    "action": move,
+                    "reward": reward,
+                    "winner": -1,  # Not terminal.
+                    "current_player": current_player_idx
+                })
+                action_id += 1
             except AssertionError as e:
-                # If an assertion error occurs (e.g. due to invalid move), try again.
                 traceback.print_exc()
 
-# If recording, create a DataFrame and save it to CSV.
-if record_csv:
-    df = pd.DataFrame(log_data, columns=["id", "obs", "action", "reward", "winner", "current_player"])
-    df.to_csv("catan_game_log.csv", index=False)
-    print("Game log saved to catan_game_log.csv")
+        # After game termination, store the log as a CSV file.
+        df = pd.DataFrame(log_data, columns=["id", "obs", "action", "reward", "winner", "current_player"])
+        s = "player"
+        csv_filename = os.path.join("games", f"{agent1_name.lower() if agents[0] is not None else s}_{agent2_name.lower() if agents[1] is not None else s}_game_{game_idx}.csv")
+        df.to_csv(csv_filename, index=False)
+        print(f"Game {game_idx} log saved to {csv_filename}")

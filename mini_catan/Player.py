@@ -116,6 +116,56 @@ class Player:
         else:
             return False
         
+    def trade_I_with_b(self, my_items, b_items):
+        
+        """
+        Perform a bank trade at a 2:1 ratio.
+        
+        The player must offer resources from exactly one type and receive resources
+        of exactly one (different) type. The total offered amount must be exactly twice 
+        the total requested amount. For example, to receive 1 unit of a resource, the player 
+        must offer 2 units of another resource.
+        
+        Args:
+            my_items (list): A list (length 4) representing the quantity of each resource offered.
+                            For instance, [2, 0, 0, 0] means offering 2 wood.
+            b_items (list): A list (length 4) representing the quantity of each resource requested.
+                            For instance, [0, 1, 0, 0] means requesting 1 brick.
+        
+        Returns:
+            bool: True if the trade is successful, False otherwise.
+        """
+        # Ensure that exactly one resource type is being offered.
+        offered_types = [i for i, x in enumerate(my_items) if x > 0]
+        if len(offered_types) != 1:
+            return False
+
+        # Ensure that exactly one resource type is being requested.
+        requested_types = [i for i, x in enumerate(b_items) if x > 0]
+        if len(requested_types) != 1:
+            return False
+
+        # Optionally, ensure that the offered and requested resource types are not the same.
+        if offered_types[0] == requested_types[0]:
+            return False
+
+        offered_amount = sum(my_items)
+        requested_amount = sum(b_items)
+
+        # Enforce the 2:1 ratio.
+        if offered_amount != 2 * requested_amount:
+            return False
+
+        # Check if the player has enough of the offered resource.
+        if not all(my <= inv for my, inv in zip(my_items, self.inventory)):
+            return False
+
+        # Perform the trade:
+        self.del_from_inv(my_items)
+        self.add_2_inv(b_items)
+        return True
+
+        
     def max_struct_check(self, struct):
         """
         Check if the player can build more of a specific structure based on game rules.

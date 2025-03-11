@@ -86,6 +86,7 @@ class RandomAgent:
         if self.cancel_next:
             self.cancel_next = False
             self.attempts = 0
+            self.action = -1
             # Safe action: End Turn (action 4) in the main action space.
             return 4
         
@@ -95,6 +96,7 @@ class RandomAgent:
             # Cancel the move.
             self.cancel_next = True
             self.attempts = 0
+            self.action = -1
             return -1
         
         # Decode key values from the observation.

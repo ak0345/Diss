@@ -122,6 +122,9 @@ class Board:
             biome_distribution.append(random.choice([Biome.FOREST, Biome.HILLS, Biome.FIELDS, Biome.PASTURE]))
         
         random.shuffle(biome_distribution)
+
+        #'biomes': array([2, 1, 4, 1, 0, 4, 3]
+        biome_distribution = [Biome.HILLS, Biome.FOREST, Biome.PASTURE, Biome.FOREST, Biome.DESERT, Biome.PASTURE, Biome.FIELDS]
         for hex, biome in zip(self.map_hexblocks, biome_distribution):
             hex.set_biome(biome)
 
@@ -133,9 +136,14 @@ class Board:
 
         while len(num_pool) < self.board_size: #all non desert hexes
             num_pool.append(random.choice(num_pool))
+
+        
         
         #num_pool.append(self.desert_num)
         random.shuffle(num_pool)
+
+        # 'hex_nums': array([5, 5, 1, 2, 6, 3, 5])
+        num_pool = [5, 5, 1, 2, 6, 3, 5]
 
         for i, (hex, num) in enumerate(zip(self.map_hexblocks, num_pool)):
             if hex.biome == Biome.DESERT:

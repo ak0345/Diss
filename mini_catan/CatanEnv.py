@@ -100,7 +100,7 @@ class MiniCatanEnv(gym.Env):
 
         self.prev_longest_road_owner = self.board.get_longest_road_owner()
 
-        self._reset_followup_variables()
+        self.reset_followup_variables()
         self.trade_initiator = None
         
         # Define action space (e.g., 5 actions: Build Road, Build Settlement, Trade with Player, Trade with Bank, End Turn)
@@ -159,18 +159,15 @@ class MiniCatanEnv(gym.Env):
 
 
         # Initial state
-        self.state = self._get_initial_state()
+        self.state = self.get_initial_state()
         self.current_player = 0
 
-    def assign_main_player(self, player):
-        self.main_player = player
-
-    def _resouce_collection_round(self):
+    def resouce_collection_round(self):
         self.dice_val = self.board.roll_dice()
         for p in self.board.players:
             self.board.give_resources(p, self.dice_val)
     
-    def _get_initial_state(self):
+    def get_initial_state(self):
         """Define the initial state of the game."""
         #Get and process Hex Biomes
         def biome_num(b):
@@ -207,9 +204,9 @@ class MiniCatanEnv(gym.Env):
             "reply_to_offer": self.reply_to_offer,
             "counter_sent": self.counter_sent
         }
-        return self._encode_observation(state)
+        return self.encode_observation(state)
     
-    def _encode_observation(self, state):
+    def encode_observation(self, state):
         obs = np.concatenate((
             state["inventories"].flatten(),  # Flatten inventories
             state["edges"].flatten(),  # Flatten edges
@@ -229,7 +226,7 @@ class MiniCatanEnv(gym.Env):
         ))
         return obs
     
-    def _reset_followup_variables(self):
+    def reset_followup_variables(self):
 
         self.init_settlement_build = True
         self.init_road_build = False
@@ -249,14 +246,14 @@ class MiniCatanEnv(gym.Env):
         """Reset the environment to the initial state."""
         super().reset(seed=seed)
         self.board = Board(["P1", "P2"])
-        self.state = self._get_initial_state()
+        self.state = self.get_initial_state()
         self.current_player = 0
 
-        self._reset_followup_variables()
+        self.reset_followup_variables()
 
         return self.state, {}
     
-    def _convert_s(self, pos):
+    def convert_s(self, pos):
         match pos:
             case 0:
                 return HexCompEnum.S1
@@ -273,7 +270,7 @@ class MiniCatanEnv(gym.Env):
             case _:
                 return None
         
-    def _convert_e(self, pos):
+    def convert_e(self, pos):
         match pos:
             case 0:
                 return HexCompEnum.E1
@@ -290,7 +287,7 @@ class MiniCatanEnv(gym.Env):
             case _:
                 return None
             
-    def _decode_observation(self, obs):
+    def decode_observation(self, obs):
         idx = 0
         inventories = obs[idx:(idx + self.num_players * 4)].reshape(self.num_players, 4)
         idx += self.num_players * 4
@@ -367,13 +364,13 @@ class MiniCatanEnv(gym.Env):
         if self.board.turn_number > 0:
             if type(action) == int and action < 0:
                 print("Cancelling action and returning to action selection")
-                self._reset_followup_variables()
+                self.reset_followup_variables()
                 # If a trade dialogue was in progress, revert to the trade initiator.
                 if self.trade_initiator is not None:
                     self.current_player = self.trade_initiator
                     self.trade_initiator = None
                 reward -= END_TURN_REWARD / 2
-                obs = self._decode_observation(self.state)
+                obs = self.decode_observation(self.state)
                 obs["edges"] = np.array(self.board.get_edges())
                 obs["sides"] = np.array(self.board.get_sides())
                 obs["victory_points"] = np.array(self.board.get_vp())
@@ -387,14 +384,14 @@ class MiniCatanEnv(gym.Env):
                 obs["p_trade_followup_3"] = self.waiting_for_p_trade_followup_3
                 obs["reply_to_offer"] = self.reply_to_offer
                 obs["counter_sent"] = self.counter_sent
-                return self._encode_observation(obs), reward, done, trunc, info
+                return self.encode_observation(obs), reward, done, trunc, info
 
             elif self.waiting_for_road_build_followup:
                 assert self.build_road_action_space.contains(action), "Invalid Road Position"
 
                 for i,s in enumerate(self.board.all_sides):
                     if i == action:
-                        placement = self.board.place_struct(curr_player, s.parent, self._convert_s(s.n), Structure.ROAD)
+                        placement = self.board.place_struct(curr_player, s.parent, self.convert_s(s.n), Structure.ROAD)
                         if placement == -1: raise AssertionError("Cannot Place Structure Here")
                         elif placement == -2: raise AssertionError("Cannot Afford Structure")
                         elif placement == -3: raise AssertionError("Reached Max Structure Limit")
@@ -407,7 +404,7 @@ class MiniCatanEnv(gym.Env):
 
                 for i,e in enumerate(self.board.all_edges):
                     if i == action:
-                        placement = self.board.place_struct(curr_player, e.parent, self._convert_e(e.n), Structure.SETTLEMENT)
+                        placement = self.board.place_struct(curr_player, e.parent, self.convert_e(e.n), Structure.SETTLEMENT)
                         if placement == -1: raise AssertionError("Cannot Place Structure Here")
                         elif placement == -2: raise AssertionError("Cannot Afford Structure")
                         elif placement == -3: raise AssertionError("Reached Max Structure Limit")
@@ -419,7 +416,7 @@ class MiniCatanEnv(gym.Env):
                 assert self.bank_trade_action_space.contains(action), "Invalid Bank Trade Action"
                 assert any(a>0 for a in action[0]), "Cannot Offer Nothing"
 
-                trade = curr_player.trade_I_with_p(self.board.bank, action[0] * 2, action[1])
+                trade = curr_player.trade_I_with_b(action[0], action[1])
                 assert trade, "Cannot Afford Trade"
                 reward += TRADE_BANK_REWARD(action[1] - (action[0] * 2)) #Requested - Offering
                 self.waiting_for_b_trade_followup = False
@@ -543,7 +540,7 @@ class MiniCatanEnv(gym.Env):
                     self.board.turn_number += 1
                     reward += END_TURN_REWARD
 
-                    self._resouce_collection_round()
+                    self.resouce_collection_round()
 
                     reward += INVENTORY_BALANCE_REWARD(curr_player.total_trades, np.array(curr_player.inventory)) #inventory balance penalty at end of turn
 
@@ -555,7 +552,7 @@ class MiniCatanEnv(gym.Env):
 
                 for i,e in enumerate(self.board.all_edges):
                     if i == action:
-                        placement = self.board.place_struct(curr_player, e.parent, self._convert_e(e.n), Structure.SETTLEMENT)
+                        placement = self.board.place_struct(curr_player, e.parent, self.convert_e(e.n), Structure.SETTLEMENT)
                         if placement == -1: raise AssertionError("Cannot Place Structure Here")
                         elif placement == -2: raise AssertionError("Cannot Afford Structure")
                         elif placement == -3: raise AssertionError("Reached Max Structure Limit")
@@ -563,7 +560,7 @@ class MiniCatanEnv(gym.Env):
                         reward += SETTLEMENT_REWARD(len(curr_player.settlements))
                         
                         if self.init_build < 2:
-                            curr_player.first_settlement = (e.parent, self._convert_e(e.n))
+                            curr_player.first_settlement = (e.parent, self.convert_e(e.n))
                         self.init_road_build = True
                         self.init_settlement_build = False
 
@@ -572,7 +569,7 @@ class MiniCatanEnv(gym.Env):
 
                 for i,s in enumerate(self.board.all_sides):
                     if i == action:
-                        placement = self.board.place_struct(curr_player, s.parent, self._convert_s(s.n), Structure.ROAD)
+                        placement = self.board.place_struct(curr_player, s.parent, self.convert_s(s.n), Structure.ROAD)
                         if placement == -1: raise AssertionError("Cannot Place Structure Here")
                         elif placement == -2: raise AssertionError("Cannot Afford Structure")
                         elif placement == -3: raise AssertionError("Reached Max Structure Limit")
@@ -589,9 +586,9 @@ class MiniCatanEnv(gym.Env):
                     self.board.give_resources(p, 0, p.first_settlement)
                 self.board.turn_number += 1
 
-                self._resouce_collection_round()
+                self.resouce_collection_round()
 
-        obs = self._decode_observation(self.state)
+        obs = self.decode_observation(self.state)
 
         obs["edges"] = np.array(self.board.get_edges())
         obs["sides"] = np.array(self.board.get_sides())
@@ -622,7 +619,7 @@ class MiniCatanEnv(gym.Env):
         info = obs
 
         # Return the observation, reward, done, and info
-        return self._encode_observation(obs), reward, done, trunc, info
+        return self.encode_observation(obs), reward, done, trunc, info
 
     def render(self):
         fig, ax = plt.subplots(figsize=(10, 8))
