@@ -103,9 +103,9 @@ if mode != "2":
             print(f"Agent for player {current_player_idx} running turn......")
             try:
                 if obs is not None:
-                    move = current_agent.act(obs)
+                    move = current_agent.act(obs, game.board)
                 else:
-                    move = current_agent.act(game.state)
+                    move = current_agent.act(game.state, game.board)
                 print("Agent move:", move)
                 obs, reward, done, trunc, info = game.step(move)
                 print(obs)
@@ -143,8 +143,8 @@ else:
                 })
                 break
 
-            #  End Game as a Stalemate if lasts more than 1000 turns or 50000 correct/incorrect moves
-            elif game.board.turn_number > 1500:
+            #  End Game as a Stalemate if lasts more than 1000
+            elif game.board.turn_number == 1000:
                 print(f"Game {game_idx}: Stalemate/Draw")
                 log_data.append({
                     "id": action_id,
@@ -159,9 +159,9 @@ else:
             # Since we are in agent vs agent mode, there is no human input.
             try:
                 if obs is not None:
-                    move = current_agent.act(obs)
+                    move = current_agent.act(obs, game.board)
                 else:
-                    move = current_agent.act(game.state)
+                    move = current_agent.act(game.state, game.board)
                 print(f"Game {game_idx}, Player {current_player_idx} move: {move}, Turn: {game.board.turn_number}")
                 obs, reward, done, trunc, info = game.step(move)
                 # Log the move.
