@@ -7,7 +7,7 @@ import pandas as pd
 import os
 
 # Create folder for game logs if it doesn't exist.
-os.makedirs("games", exist_ok=True)
+os.makedirs("games_g_diff", exist_ok=True)
 
 print("Choose game mode:")
 print("1. Human vs Agent")
@@ -81,15 +81,35 @@ if mode != "2":
     game = game.unwrapped
     game.reset()
     obs, reward, done, trunc, info = None, None, None, None, None
+    
     while True:
-        current_player_idx = game.current_player  # index 0 or 1
+        # During initialization phase, use init_phase to determine the player rather than current_player due to Synchronisation issues
+        # This ensures we follow the snake draft pattern correctly
+        if game.board.turn_number == 0 and hasattr(game, 'init_phase'):
+            # First round (phases 0-3): Player 1, Player 2
+            # Second round (phases 4-7): Player 2, Player 1 (reversed)
+            if game.init_phase < 4:
+                current_player_idx = game.init_phase // 2  # 0, 0, 1, 1
+            else:
+                current_player_idx = 1 - ((game.init_phase - 4) // 2)  # 1, 1, 0, 0
+        else:
+            current_player_idx = game.current_player  # Use the game's current player for normal play
+        
         current_agent = agents[current_player_idx]
+        
         if done == True:
             winner = current_player_idx + 1
             print(f"Player {winner} wins!")
             #game.render()
             break
         elif current_agent is None:
+            # Display current player and phase during initialization
+            if game.board.turn_number == 0 and hasattr(game, 'init_phase'):
+                phase_type = "settlement" if game.init_phase % 2 == 0 else "road"
+                print(f"Player {current_player_idx + 1}'s turn to place a {phase_type} (Phase {game.init_phase + 1}/8)")
+            else:
+                print(f"Player {current_player_idx + 1}'s turn")
+            
             user_command = input(">>> ")
             if user_command.strip().lower() == "exit":
                 break
@@ -100,12 +120,12 @@ if mode != "2":
             except Exception as e:
                 print("Error:", e)
         else:
-            print(f"Agent for player {current_player_idx} running turn......")
+            print(f"Agent for player {current_player_idx + 1} running turn......")
             try:
                 if obs is not None:
-                    move = current_agent.act(obs, game.board)
+                    move = current_agent.act(obs, game.board, game)
                 else:
-                    move = current_agent.act(game.state, game.board)
+                    move = current_agent.act(game.state, game.board, game)
                 print("Agent move:", move)
                 obs, reward, done, trunc, info = game.step(move)
                 print(obs)
@@ -126,7 +146,15 @@ else:
 
         # Run the game simulation until it terminates.
         while True:
-            current_player_idx = game.current_player  # index 0 or 1
+            # During initialization phase, use init_phase to determine the player
+            if game.board.turn_number == 0 and hasattr(game, 'init_phase'):
+                if game.init_phase < 4:
+                    current_player_idx = game.init_phase // 2
+                else:
+                    current_player_idx = 1 - ((game.init_phase - 4) // 2)
+            else:
+                current_player_idx = game.current_player
+                
             current_agent = agents[current_player_idx]
 
             if done == True:
@@ -141,6 +169,7 @@ else:
                     "winner": winner,
                     "current_player": current_player_idx
                 })
+                #game.render()
                 break
 
             #  End Game as a Stalemate if lasts more than 1000
@@ -154,15 +183,23 @@ else:
                     "winner": -1,
                     "current_player": current_player_idx
                 })
+                #game.render()
                 break
 
             # Since we are in agent vs agent mode, there is no human input.
             try:
                 if obs is not None:
-                    move = current_agent.act(obs, game.board)
+                    move = current_agent.act(obs, game.board, game)
                 else:
-                    move = current_agent.act(game.state, game.board)
-                print(f"Game {game_idx}, Player {current_player_idx} move: {move}, Turn: {game.board.turn_number}")
+                    move = current_agent.act(game.state, game.board, game)
+                
+                # Add more informative logging during initialization
+                if game.board.turn_number == 0 and hasattr(game, 'init_phase'):
+                    phase_type = "settlement" if game.init_phase % 2 == 0 else "road"
+                    print(f"Game {game_idx}, Player {current_player_idx+1} placing {phase_type}: {move}, Phase: {game.init_phase+1}/8")
+                else:
+                    print(f"Game {game_idx}, Player {current_player_idx+1} move: {move}, Turn: {game.board.turn_number}")
+                
                 obs, reward, done, trunc, info = game.step(move)
                 # Log the move.
                 log_data.append({
@@ -180,6 +217,6 @@ else:
         # After game termination, store the log as a CSV file.
         df = pd.DataFrame(log_data, columns=["id", "obs", "action", "reward", "winner", "current_player"])
         s = "player"
-        csv_filename = os.path.join("games", f"{agent1_name.lower() if agents[0] is not None else s}_{agent2_name.lower() if agents[1] is not None else s}_game_{game_idx}.csv")
+        csv_filename = os.path.join("games_g_diff", f"{agent1_name.lower() if agents[0] is not None else s}_{agent2_name.lower() if agents[1] is not None else s}_game_{game_idx}.csv")
         df.to_csv(csv_filename, index=False)
         print(f"Game {game_idx} log saved to {csv_filename}")

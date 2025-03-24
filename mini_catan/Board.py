@@ -7,35 +7,6 @@ from mini_catan.Hex import HexBlock
 from mini_catan.Player import Player
 from mini_catan.Die import Die
 
-import numpy as np
-
-# Reward variables
-S_max = 5
-R_max = 10
-n_type = 4
-
-alpha = 0.5
-U = lambda x: -np.exp(-alpha * x)
-R_avg = lambda R_r: np.sum(R_r) / n_type
-
-# Reward functions
-ROAD_REWARD = lambda S_2R, S_p: 1 + 1.15 * ( S_2R / max(S_p, 1))
-SETTLEMENT_REWARD = lambda S_p: 2 + 1.5 * (S_p / S_max)
-TRADE_BANK_REWARD = lambda d_r: 1 + U(0.25 + np.sum(d_r))
-TRADE_PLAYER_REWARD = lambda d_r: 1 + U(0.5 + np.sum(d_r))
-REJECTED_TRADE_REWARD = lambda T_R: U(1.5 + np.power(T_R,2))
-COUTNER_OFFER_REJECTED_REWARD = lambda T_R: U(2 + np.power(T_R,3))
-COUTNER_OFFER_ACCEPTED_REWARD = lambda d_r: 1 + U(2.5 + np.sum(d_r))
-INVENTORY_BALANCE_REWARD = lambda T_n, R_r: U(T_n + 1 + np.sum(np.abs(R_r - R_avg(R_r))))
-LONGEST_ROAD_REWARD = 2
-END_TURN_REWARD = 0.05
-WIN_REWARD = 10
-LOSE_REWARD = -10
-INITIATE_ROAD_REWARD = 0.2
-INITIATE_SETTLEMENT_REWARD = 0.3
-INITIATE_TRADE_BANK_REWARD = 0.1
-INITIATE_TRADE_PLAYER_REWARD = 0.15
-
 
 class Board:
     def __init__(self, player_names):
@@ -60,6 +31,7 @@ class Board:
         self.current_longest_road = 0
         self.longest_road_owner = None
         self.desert_num = 6
+        self.current_player = 0
 
         # Define Hex blocks
         self.h1 = HexBlock(0, 1)
@@ -154,7 +126,8 @@ class Board:
         random.shuffle(biome_distribution)
 
         #'biomes': array([2, 1, 4, 1, 0, 4, 3]
-        biome_distribution = [Biome.HILLS, Biome.FOREST, Biome.PASTURE, Biome.FOREST, Biome.DESERT, Biome.PASTURE, Biome.FIELDS]
+        # Uncomment below to keep map same
+        #biome_distribution = [Biome.HILLS, Biome.FOREST, Biome.PASTURE, Biome.FOREST, Biome.DESERT, Biome.PASTURE, Biome.FIELDS]
         for hex, biome in zip(self.map_hexblocks, biome_distribution):
             hex.set_biome(biome)
 
@@ -173,7 +146,8 @@ class Board:
         random.shuffle(num_pool)
 
         # 'hex_nums': array([5, 5, 1, 2, 6, 3, 5])
-        num_pool = [5, 5, 1, 2, 6, 3, 5]
+        # Uncomment below to keep map same
+        #num_pool = [5, 5, 1, 2, 6, 3, 5]
 
         for i, (hex, num) in enumerate(zip(self.map_hexblocks, num_pool)):
             if hex.biome == Biome.DESERT:
@@ -489,77 +463,3 @@ class Board:
             if p == self.longest_road_owner:
                 return i+1
         return 0
-    
-    import numpy as np
-
-def simulate_place_road(self, p, candidate_side):
-    """
-    Simulate placing a road for player p at the position defined by candidate_side.
-    
-    Args:
-        p (Player): The player attempting to build the road.
-        candidate_side: A candidate road placement; assumed to have attributes:
-            - parent: the hex block (hn) where the road would be placed.
-            - n: the position index within that hex block.
-    
-    Returns:
-        float: An estimated reward for placing the road, or -np.inf if the move is invalid.
-    """
-    # Check that the player hasn't reached their maximum road limit and can afford a road.
-    if not p.max_struct_check(Structure.ROAD):
-        return -np.inf
-    if not p.cost_check(Structure.ROAD):
-        return -np.inf
-    
-    # Get the hex block and position.
-    hn = candidate_side.parent
-    pos = candidate_side.n
-    
-    # Check if the position is empty and meets nearby placement rules.
-    if not hn.pos_is_empty(pos, Structure.ROAD) or not hn.check_nearby(pos, Structure.ROAD, p, self.turn_number):
-        return -np.inf
-    
-    original = p.roads
-    p.roads = original + [candidate_side]
-    
-    # If valid, estimate the reward.
-    base_reward = ROAD_REWARD(p.get_player_s2r(), len(p.settlements))
-    # Simulate the potential impact on the longest road.
-    longest = self.longest_road(p)
-
-    p.roads = original
-
-    additional = 0
-    if longest >= self.min_longest_road and longest > self.current_longest_road:
-        additional = LONGEST_ROAD_REWARD
-        
-    return base_reward + additional
-
-def simulate_place_settlement(self, p, candidate_edge):
-    """
-    Simulate placing a settlement for player p at the position defined by candidate_edge.
-    
-    Args:
-        p (Player): The player attempting to build the settlement.
-        candidate_edge: A candidate settlement placement; assumed to have attributes:
-            - parent: the hex block (hn) where the settlement would be placed.
-            - n: the position index within that hex block.
-    
-    Returns:
-        float: An estimated reward for placing the settlement, or -np.inf if the move is invalid.
-    """
-    # Check that the player hasn't reached their maximum settlement limit and can afford a settlement.
-    if not p.max_struct_check(Structure.SETTLEMENT):
-        return -np.inf
-    if not p.cost_check(Structure.SETTLEMENT):
-        return -np.inf
-    
-    hn = candidate_edge.parent
-    pos = candidate_edge.n
-    
-    if not hn.pos_is_empty(pos, Structure.SETTLEMENT) or not hn.check_nearby(pos, Structure.SETTLEMENT, p, self.turn_number):
-        return -np.inf
-    
-    # Estimate reward for a settlement.
-    reward = SETTLEMENT_REWARD(len(p.settlements))
-    return reward

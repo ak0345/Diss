@@ -4,11 +4,9 @@ import matplotlib.pyplot as plt
 
 df_games = []
 for c in range(1000):
-    df = pd.read_csv(r"C:\Users\foosh\OneDrive\Desktop\projects\DIss\games2\randomagentv2_randomagentv2_game_"+f"{c+1}.csv")
+    df = pd.read_csv(r"C:\Users\foosh\OneDrive\Desktop\projects\DIss\games_g_same\greedyagent_greedyagent_game_"+f"{c+1}.csv")
     df_games.append(df)
 
-
-# Assume df_games is already a list of DataFrames loaded from your CSV files.
 # Each DataFrame has columns: id, obs, action, reward, winner, current_player.
 # Here we combine them into one DataFrame for analysis.
 all_games = pd.concat(
@@ -77,9 +75,7 @@ plt.ylabel("Number of Wins")
 plt.title("Winning Frequency")
 plt.show()
 
-# Additional Analysis:
-# For example, you might want to examine how rewards evolve during the game.
-# Let's plot the cumulative reward over moves for a selected game (e.g., game_id == 1).
+# Plot the cumulative reward over moves for first 5 games
 for i in range(5):
     selected_game = all_games[all_games["game_id"] == (i+1)].copy()
     selected_game["cumulative_reward"] = selected_game["reward"].cumsum()

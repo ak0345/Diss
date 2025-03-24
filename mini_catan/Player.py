@@ -1,4 +1,5 @@
 import random
+import numpy as np
 from mini_catan.enums import Structure
 
 class Player:
@@ -20,6 +21,8 @@ class Player:
         self.roads = [] # List of roads owned by the player
         self.trades_rejected = 0
         self.total_trades = 0
+        self.second_settlement = None
+        self.first_settlement = None
 
     def get_player_s2r(self):
         count = 0
@@ -90,7 +93,10 @@ class Player:
         self.inventory = [a - b for a, b in zip(self.inventory, items)]
 
     def trade_cost_check(self, p, my_items, p_items):
-        return all(my <= inv for my, inv in zip(my_items, self.inventory)) and all(pi <= inv for pi, inv in zip(p_items, p.inventory))
+        return (
+        np.all(np.array(my_items) <= np.array(self.inventory)) and 
+        np.all(np.array(p_items) <= np.array(p.inventory))
+    )
 
     def trade_I_with_p(self, p, my_items, p_items):
         """

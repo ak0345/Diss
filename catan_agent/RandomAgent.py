@@ -78,7 +78,7 @@ class RandomAgent:
         
         return np.stack([offer, request])
     
-    def act(self, obs, real_board):
+    def act(self, obs, board, current_player):
         # Ensure obs is a numpy array.
         obs = np.array(obs)
         

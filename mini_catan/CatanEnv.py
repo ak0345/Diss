@@ -161,6 +161,8 @@ class MiniCatanEnv(gym.Env):
         # Initial state
         self.state = self.get_initial_state()
         self.current_player = 0
+        self.init_phase = 0  # 0=P1 settlement, 1=P1 road, 2=P2 settlement, 3=P2 road, 
+                         # 4=P2 settlement2, 5=P2 road2, 6=P1 settlement2, 7=P1 road2
 
     def resouce_collection_round(self):
         self.dice_val = self.board.roll_dice()
@@ -544,49 +546,66 @@ class MiniCatanEnv(gym.Env):
 
                     reward += INVENTORY_BALANCE_REWARD(curr_player.total_trades, np.array(curr_player.inventory)) #inventory balance penalty at end of turn
 
-        else: 
-            # Build set 1 and road 1 and then set 2 and road 2
-
-            if self.init_settlement_build and self.init_build < 4:
-                assert self.build_settlement_action_space.contains(action), "Invalid Settlement Position"
-
-                for i,e in enumerate(self.board.all_edges):
-                    if i == action:
-                        placement = self.board.place_struct(curr_player, e.parent, self.convert_e(e.n), Structure.SETTLEMENT)
-                        if placement == -1: raise AssertionError("Cannot Place Structure Here")
-                        elif placement == -2: raise AssertionError("Cannot Afford Structure")
-                        elif placement == -3: raise AssertionError("Reached Max Structure Limit")
-                        
-                        reward += SETTLEMENT_REWARD(len(curr_player.settlements))
-                        
-                        if self.init_build < 2:
-                            curr_player.first_settlement = (e.parent, self.convert_e(e.n))
-                        self.init_road_build = True
-                        self.init_settlement_build = False
-
-            elif self.init_road_build and self.init_build < 4:
-                assert self.build_road_action_space.contains(action), "Invalid Road Position"
-
-                for i,s in enumerate(self.board.all_sides):
-                    if i == action:
-                        placement = self.board.place_struct(curr_player, s.parent, self.convert_s(s.n), Structure.ROAD)
-                        if placement == -1: raise AssertionError("Cannot Place Structure Here")
-                        elif placement == -2: raise AssertionError("Cannot Afford Structure")
-                        elif placement == -3: raise AssertionError("Reached Max Structure Limit")
-
-                        reward += ROAD_REWARD(curr_player.get_player_s2r(), len(curr_player.settlements))
-
-                        self.init_road_build = False
-                        self.init_settlement_build = True
-                        self.current_player = (self.current_player + 1) % self.num_players
-                        self.init_build += 1
-            
-            if self.init_build == 4:
-                for p in self.board.players:
-                    self.board.give_resources(p, 0, p.first_settlement)
-                self.board.turn_number += 1
-
-                self.resouce_collection_round()
+        else:  # Initial placement phase (turn_number == 0)
+            # Implementation of proper snake draft (1-2-2-1)
+            if self.init_phase < 8:
+                # Determine current action type (settlement or road)
+                is_settlement = (self.init_phase % 2 == 0)
+                
+                # Determine current player based on snake draft pattern
+                if self.init_phase < 4:
+                    # First round: P1-P2 order
+                    current_player_idx = self.init_phase // 2
+                else:
+                    # Second round: P2-P1 order (reversed)
+                    current_player_idx = 1 - ((self.init_phase - 4) // 2)
+                    
+                self.current_player = current_player_idx % 2
+                curr_player = self.board.players[current_player_idx]
+                
+                if is_settlement:
+                    # Settlement building logic
+                    assert self.build_settlement_action_space.contains(action), "Invalid Settlement Position"
+                    
+                    for i,e in enumerate(self.board.all_edges):
+                        if i == action:
+                            placement = self.board.place_struct(curr_player, e.parent, self.convert_e(e.n), Structure.SETTLEMENT)
+                            if placement == -1: raise AssertionError("Cannot Place Structure Here")
+                            elif placement == -2: raise AssertionError("Cannot Afford Structure")
+                            elif placement == -3: raise AssertionError("Reached Max Structure Limit")
+                            
+                            reward += SETTLEMENT_REWARD(len(curr_player.settlements))
+                            
+                            # Track which settlement is first/second for resource distribution
+                            if self.init_phase < 4:  # First round
+                                curr_player.first_settlement = (e.parent, self.convert_e(e.n))
+                            else:  # Second round
+                                curr_player.second_settlement = (e.parent, self.convert_e(e.n))
+                else:
+                    # Road building logic
+                    assert self.build_road_action_space.contains(action), "Invalid Road Position"
+                    
+                    for i,s in enumerate(self.board.all_sides):
+                        if i == action:
+                            placement = self.board.place_struct(curr_player, s.parent, self.convert_s(s.n), Structure.ROAD)
+                            if placement == -1: raise AssertionError("Cannot Place Structure Here")
+                            elif placement == -2: raise AssertionError("Cannot Afford Structure")
+                            elif placement == -3: raise AssertionError("Reached Max Structure Limit")
+                            
+                            reward += ROAD_REWARD(curr_player.get_player_s2r(), len(curr_player.settlements))
+                
+                # Move to next step in initial placement
+                self.init_phase += 1
+                
+                # Check if initial placement is complete
+                if self.init_phase == 8:
+                    # Give resources from SECOND settlement only (standard Catan rules)
+                    for p in self.board.players:
+                        if hasattr(p, 'second_settlement'):
+                            self.board.give_resources(p, 0, p.second_settlement)
+                    
+                    self.board.turn_number += 1
+                    self.resouce_collection_round()
 
         obs = self.decode_observation(self.state)
 
