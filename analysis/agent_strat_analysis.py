@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 df_games = []
 for c in range(1000):
-    df = pd.read_csv(r"C:\Users\foosh\OneDrive\Desktop\projects\DIss\games_g_same\greedyagent_greedyagent_game_"+f"{c+1}.csv")
+    df = pd.read_csv(r"C:\Users\foosh\OneDrive\Desktop\projects\DIss\games_ep_diff\epsilonagent_epsilonagent_game_"+f"{c+1}.csv")
     df_games.append(df)
 
 # Each DataFrame has columns: id, obs, action, reward, winner, current_player.

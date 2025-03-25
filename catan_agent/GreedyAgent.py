@@ -1,6 +1,5 @@
 import numpy as np
 from mini_catan.enums import Structure, Biome, HexCompEnum
-import time
 
 class GreedyAgent:
     def __init__(self, player_id=None):
@@ -26,10 +25,6 @@ class GreedyAgent:
         # Track rejected trades to avoid repeating them
         self.rejected_trades = []
         self.max_rejected_trades = 10  # Maximum number of rejected trades to remember
-        
-        # Time-based behavior to prevent getting stuck
-        self.last_action_time = time.time()
-        self.action_timeout = 5  # seconds before forcing a different action
         
         # Anti-stalemate measures
         self.consecutive_end_turns = 0
@@ -1107,14 +1102,6 @@ class GreedyAgent:
                 if self.trade_failures > 0:
                     trade_reward -= 0.3 * self.trade_failures
                 
-                # Check if too much time has passed in the same action loop
-                current_time = time.time()
-                time_since_last_action = current_time - self.last_action_time
-                
-                if time_since_last_action > self.action_timeout:
-                    # Time-based penalty to encourage trying different actions
-                    trade_reward -= 1.0
-                
                 actions[2] = trade_reward
             else:
                 actions[2] = -np.inf
@@ -1158,14 +1145,6 @@ class GreedyAgent:
                 # Penalty for repeated bank trade attempts
                 if self.bank_trade_failures > 0:
                     bank_reward -= 0.3 * self.bank_trade_failures
-                
-                # Check if too much time has passed in the same action loop
-                current_time = time.time()
-                time_since_last_action = current_time - self.last_action_time
-                
-                if time_since_last_action > self.action_timeout:
-                    # Time-based penalty to encourage trying different actions
-                    bank_reward -= 1.0
                     
                 actions[3] = bank_reward
             else:
@@ -1191,7 +1170,6 @@ class GreedyAgent:
                 # Reset failure counter on successful placement
                 self.road_placement_failures = 0
                 self.consecutive_end_turns = 0  # Reset end turn counter on build
-                self.last_action_time = time.time()  # Update time
                 return best_side_idx
             else:
                 # Increment failure counter
@@ -1220,7 +1198,6 @@ class GreedyAgent:
                 # Reset failure counter on successful placement
                 self.settlement_placement_failures = 0
                 self.consecutive_end_turns = 0  # Reset end turn counter on build
-                self.last_action_time = time.time()  # Update time
                 return best_edge_idx
             else:
                 # Increment failure counter
@@ -1290,9 +1267,6 @@ class GreedyAgent:
             if self.consecutive_end_turns >= self.stuck_threshold * 2:
                 self.rejected_trades = []
                 print(f"Agent {player_idx} forgetting all rejected trades after {self.consecutive_end_turns} end turns")
-        
-        # Update last action time
-        self.last_action_time = time.time()
         
         return best_action
 

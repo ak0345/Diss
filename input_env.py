@@ -7,7 +7,7 @@ import pandas as pd
 import os
 
 # Create folder for game logs if it doesn't exist.
-os.makedirs("games_g_diff", exist_ok=True)
+os.makedirs("games_ep_diff", exist_ok=True)
 
 print("Choose game mode:")
 print("1. Human vs Agent")
@@ -217,6 +217,6 @@ else:
         # After game termination, store the log as a CSV file.
         df = pd.DataFrame(log_data, columns=["id", "obs", "action", "reward", "winner", "current_player"])
         s = "player"
-        csv_filename = os.path.join("games_g_diff", f"{agent1_name.lower() if agents[0] is not None else s}_{agent2_name.lower() if agents[1] is not None else s}_game_{game_idx}.csv")
+        csv_filename = os.path.join("games_ep_diff", f"{agent1_name.lower() if agents[0] is not None else s}_{agent2_name.lower() if agents[1] is not None else s}_game_{game_idx}.csv")
         df.to_csv(csv_filename, index=False)
         print(f"Game {game_idx} log saved to {csv_filename}")
