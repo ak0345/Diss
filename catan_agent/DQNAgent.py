@@ -40,7 +40,7 @@ class DQNAgent:
                  bank_trade_action_size=16,
                  player_trade_action_size=16,
                  player_trade_response_size=3,
-                 memory_size=100000,
+                 memory_size=1000000,
                  batch_size=64,
                  gamma=0.99,
                  epsilon_start=1.0,
