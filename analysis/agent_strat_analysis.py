@@ -1,11 +1,14 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import glob
+import sys
 
-df_games = []
-for c in range(1000):
-    df = pd.read_csv(r"C:\Users\foosh\OneDrive\Desktop\projects\DIss\games_ep_diff\epsilonagent_epsilonagent_game_"+f"{c+1}.csv")
-    df_games.append(df)
+folder_path = r"C:\Users\foosh\OneDrive\Desktop\projects\DIss"
+# Use glob to create a list of all CSV files in the folder
+csv_files = glob.glob(folder_path + f"\{sys.argv[1]}" + r"\*.csv")
+# Read each CSV file into a list of DataFrames
+df_games = [pd.read_csv(file) for file in csv_files]
 
 # Each DataFrame has columns: id, obs, action, reward, winner, current_player.
 # Here we combine them into one DataFrame for analysis.

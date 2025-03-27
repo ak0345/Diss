@@ -1,4 +1,4 @@
-__all__ = ["DQNAgent", "RandomAgent"]
+__all__ = ["DQNAgent", "RandomAgent", "RandomAgentV2", "GreedyAgent", "EpsilonAgent"]
 
 from . import DQNAgent
 from . import RandomAgent

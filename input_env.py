@@ -5,102 +5,69 @@ import numpy as np
 import traceback
 import pandas as pd
 import os
+import sys
+import argparse
+import importlib
 
-# Create folder for game logs if it doesn't exist.
-os.makedirs("games_ep_diff", exist_ok=True)
+def render(render_flag, game):
+    """Render the game if the render flag is True"""
+    if render_flag:
+        game.render()
 
-print("Choose game mode:")
-print("1. Human vs Agent")
-print("2. Agent vs Agent")
-print("3. Human vs Human")
-mode = input(">>> ").strip()
-
-if mode == "1":
-    # Human vs Agent: main player (index 0) is human; opponent (index 1) is agent.
-    print("Choose a valid agent to go up against (type 'player' for human):")
-    agent_name = input(">>> ").strip()
+def create_agent(agent_name, player_index):
+    """Create an agent instance based on agent name"""
     try:
-        if "agent" in agent_name.lower():
-            agent = eval(f"catan_agent.{agent_name}.{agent_name}()")
-        elif agent_name.lower() == "player":
-            agent = None
-    except (NameError, AttributeError) as e:
-        print("Incorrect command or Agent Name:", e)
-        agent = None
+        if agent_name.lower() == "none" or agent_name.lower() == "player" or agent_name.lower() == "human":
+            return None
+        
+        # Try to import the agent module if it's not already imported
+        if not agent_name.lower() in sys.modules:
+            try:
+                importlib.import_module(f"catan_agent.{agent_name}")
+            except ImportError:
+                print(f"Warning: Could not import module catan_agent.{agent_name}")
+        
+        # Create the agent
+        agent = eval(f"catan_agent.{agent_name}.{agent_name}({player_index})")
+        return agent
+    except (NameError, AttributeError, ImportError) as e:
+        print(f"Error creating agent {agent_name}: {e}")
+        return None
+
+def human_vs_agent_mode(args):
+    """Run in Human vs Agent mode"""
+    # Human as player 1, agent as player 2
+    agent = create_agent(args.agent2, 1)
     agents = [None, agent]
-
-elif mode == "2":
-    # Agent vs Agent: ask for an agent for each player.
-    print("Enter agent for Player 1:")
-    agent1_name = input(">>> ").strip()
-    try:
-        if "agent" in agent1_name.lower():
-            agent1 = eval(f"catan_agent.{agent1_name}.{agent1_name}(0)")
-        else:
-            agent1 = None
-    except (NameError, AttributeError) as e:
-        print("Incorrect command or Agent Name for Player 1:", e)
-        agent1 = None
-
-    print("Enter agent for Player 2:")
-    agent2_name = input(">>> ").strip()
-    try:
-        if "agent" in agent2_name.lower():
-            agent2 = eval(f"catan_agent.{agent2_name}.{agent2_name}(1)")
-        else:
-            agent2 = None
-    except (NameError, AttributeError) as e:
-        print("Incorrect command or Agent Name for Player 2:", e)
-        agent2 = None
-
-    agents = [agent1, agent2]
-
-elif mode == "3":
-    # Human vs Human: both players are human.
-    agents = [None, None]
-
-else:
-    print("Invalid mode selection; defaulting to Human vs Human")
-    agents = [None, None]
-
-# If not in Agent vs Agent mode, run interactively.
-if mode != "2":
-    print("Type any valid command (e.g., game.step(2), game.render()) or 'exit' to quit.")
-    print("Game mode selected:")
-    if agents[0] is None and agents[1] is None:
-        print("Human vs Human")
-    elif agents[0] is None and agents[1] is not None:
-        print("Human vs Agent")
-    elif agents[0] is not None and agents[1] is None:
-        print("Agent vs Human")
-    else:
-        print("Agent vs Agent")
     
-    # Create and reset the environment.
+    print("Game mode: Human vs Agent")
+    if agent is None:
+        print("Warning: Could not create agent. Defaulting to Human vs Human.")
+    
+    # Create and reset the environment
     game = gym.make("MiniCatanEnv-v0")
     game = game.unwrapped
     game.reset()
     obs, reward, done, trunc, info = None, None, None, None, None
     
+    print("Type any valid command (e.g., game.step(2), game.render()) or 'exit' to quit.")
+    
     while True:
-        # During initialization phase, use init_phase to determine the player rather than current_player due to Synchronisation issues
-        # This ensures we follow the snake draft pattern correctly
+        # Determine current player (handling initialization phase)
         if game.board.turn_number == 0 and hasattr(game, 'init_phase'):
-            # First round (phases 0-3): Player 1, Player 2
-            # Second round (phases 4-7): Player 2, Player 1 (reversed)
             if game.init_phase < 4:
                 current_player_idx = game.init_phase // 2  # 0, 0, 1, 1
             else:
                 current_player_idx = 1 - ((game.init_phase - 4) // 2)  # 1, 1, 0, 0
         else:
-            current_player_idx = game.current_player  # Use the game's current player for normal play
+            current_player_idx = game.current_player
         
         current_agent = agents[current_player_idx]
         
-        if done == True:
+        if done:
             winner = current_player_idx + 1
             print(f"Player {winner} wins!")
-            #game.render()
+            render(args.render, game)
             break
         elif current_agent is None:
             # Display current player and phase during initialization
@@ -132,11 +99,142 @@ if mode != "2":
             except AssertionError as e:
                 traceback.print_exc()
 
-# If Agent vs Agent mode, run n simulations and record logs.
-else:
-    n_games = int(input("Enter number of games to simulate: ").strip())
-    for game_idx in range(1, n_games+1):
-        print(f"\n=== Starting simulation game {game_idx} ===")
+def agent_vs_human_mode(args):
+    """Run in Agent vs Human mode"""
+    # Agent as player 1, human as player 2
+    agent = create_agent(args.agent1, 0)
+    agents = [agent, None]
+    
+    print("Game mode: Agent vs Human")
+    if agent is None:
+        print("Warning: Could not create agent. Defaulting to Human vs Human.")
+    
+    # Create and reset the environment
+    game = gym.make("MiniCatanEnv-v0")
+    game = game.unwrapped
+    game.reset()
+    obs, reward, done, trunc, info = None, None, None, None, None
+    
+    print("Type any valid command (e.g., game.step(2), game.render()) or 'exit' to quit.")
+    
+    while True:
+        # Determine current player (handling initialization phase)
+        if game.board.turn_number == 0 and hasattr(game, 'init_phase'):
+            if game.init_phase < 4:
+                current_player_idx = game.init_phase // 2  # 0, 0, 1, 1
+            else:
+                current_player_idx = 1 - ((game.init_phase - 4) // 2)  # 1, 1, 0, 0
+        else:
+            current_player_idx = game.current_player
+        
+        current_agent = agents[current_player_idx]
+        
+        if done:
+            winner = current_player_idx + 1
+            print(f"Player {winner} wins!")
+            render(args.render, game)
+            break
+        elif current_agent is None:
+            # Display current player and phase during initialization
+            if game.board.turn_number == 0 and hasattr(game, 'init_phase'):
+                phase_type = "settlement" if game.init_phase % 2 == 0 else "road"
+                print(f"Player {current_player_idx + 1}'s turn to place a {phase_type} (Phase {game.init_phase + 1}/8)")
+            else:
+                print(f"Player {current_player_idx + 1}'s turn")
+            
+            user_command = input(">>> ")
+            if user_command.strip().lower() == "exit":
+                break
+            try:
+                result = eval(user_command)
+                if result is not None:
+                    print(result)
+            except Exception as e:
+                print("Error:", e)
+        else:
+            print(f"Agent for player {current_player_idx + 1} running turn......")
+            try:
+                if obs is not None:
+                    move = current_agent.act(obs, game.board, game)
+                else:
+                    move = current_agent.act(game.state, game.board, game)
+                print("Agent move:", move)
+                obs, reward, done, trunc, info = game.step(move)
+                print(obs)
+            except AssertionError as e:
+                traceback.print_exc()
+
+def human_vs_human_mode(args):
+    """Run in Human vs Human mode"""
+    agents = [None, None]
+    
+    print("Game mode: Human vs Human")
+    
+    # Create and reset the environment
+    game = gym.make("MiniCatanEnv-v0")
+    game = game.unwrapped
+    game.reset()
+    obs, reward, done, trunc, info = None, None, None, None, None
+    
+    print("Type any valid command (e.g., game.step(2), game.render()) or 'exit' to quit.")
+    
+    while True:
+        # Determine current player (handling initialization phase)
+        if game.board.turn_number == 0 and hasattr(game, 'init_phase'):
+            if game.init_phase < 4:
+                current_player_idx = game.init_phase // 2  # 0, 0, 1, 1
+            else:
+                current_player_idx = 1 - ((game.init_phase - 4) // 2)  # 1, 1, 0, 0
+        else:
+            current_player_idx = game.current_player
+        
+        if done:
+            winner = current_player_idx + 1
+            print(f"Player {winner} wins!")
+            render(args.render, game)
+            break
+        else:
+            # Display current player and phase during initialization
+            if game.board.turn_number == 0 and hasattr(game, 'init_phase'):
+                phase_type = "settlement" if game.init_phase % 2 == 0 else "road"
+                print(f"Player {current_player_idx + 1}'s turn to place a {phase_type} (Phase {game.init_phase + 1}/8)")
+            else:
+                print(f"Player {current_player_idx + 1}'s turn")
+            
+            user_command = input(">>> ")
+            if user_command.strip().lower() == "exit":
+                break
+            try:
+                result = eval(user_command)
+                if result is not None:
+                    print(result)
+            except Exception as e:
+                print("Error:", e)
+
+def agent_vs_agent_mode(args):
+    """Run in Agent vs Agent mode"""
+    # Create agents
+    agent1 = create_agent(args.agent1, 0)
+    agent2 = create_agent(args.agent2, 1)
+    
+    if agent1 is None:
+        print(f"Error: Could not create agent1 ({args.agent1}). Exiting.")
+        return
+    
+    if agent2 is None:
+        print(f"Error: Could not create agent2 ({args.agent2}). Exiting.")
+        return
+    
+    agents = [agent1, agent2]
+    print(f"Game mode: Agent vs Agent ({args.agent1} vs {args.agent2})")
+    print(f"Running {args.num_games} simulations")
+    
+    # Create folder for storing logs
+    os.makedirs(f"experiments/{args.experiment}", exist_ok=True)
+    
+    # Run simulations
+    for game_idx in range(1, args.num_games + 1):
+        print(f"\n=== Starting simulation game {game_idx}/{args.num_games} ===")
         game = gym.make("MiniCatanEnv-v0")
         game = game.unwrapped
         game.reset()
@@ -144,9 +242,9 @@ else:
         action_id = 0
         obs, reward, done, trunc, info = None, None, None, None, None
 
-        # Run the game simulation until it terminates.
+        # Run the game simulation until it terminates
         while True:
-            # During initialization phase, use init_phase to determine the player
+            # Determine current player (handling initialization phase)
             if game.board.turn_number == 0 and hasattr(game, 'init_phase'):
                 if game.init_phase < 4:
                     current_player_idx = game.init_phase // 2
@@ -157,10 +255,9 @@ else:
                 
             current_agent = agents[current_player_idx]
 
-            if done == True:
-                winner = current_player_idx + 1  # 1-indexed winner.
+            if done:
+                winner = current_player_idx + 1  # 1-indexed winner
                 print(f"Game {game_idx}: Player {winner} wins!")
-                #game.render()
                 log_data.append({
                     "id": action_id,
                     "obs": obs.tolist() if obs is not None else None,
@@ -169,10 +266,10 @@ else:
                     "winner": winner,
                     "current_player": current_player_idx
                 })
-                #game.render()
+                render(args.render, game)
                 break
 
-            #  End Game as a Stalemate if lasts more than 1000
+            # End Game as a Stalemate if lasts more than 1000 turns
             elif game.board.turn_number == 1000:
                 print(f"Game {game_idx}: Stalemate/Draw")
                 log_data.append({
@@ -183,10 +280,11 @@ else:
                     "winner": -1,
                     "current_player": current_player_idx
                 })
-                #game.render()
+                render(args.render, game)
+                mini_catan.CatanEnv.print("============================================ Game Concluded ============================================")
                 break
 
-            # Since we are in agent vs agent mode, there is no human input.
+            # Get agent move and update environment
             try:
                 if obs is not None:
                     move = current_agent.act(obs, game.board, game)
@@ -201,22 +299,58 @@ else:
                     print(f"Game {game_idx}, Player {current_player_idx+1} move: {move}, Turn: {game.board.turn_number}")
                 
                 obs, reward, done, trunc, info = game.step(move)
-                # Log the move.
+                
+                # Log the move
                 log_data.append({
                     "id": action_id,
                     "obs": obs.tolist() if obs is not None else None,
                     "action": move,
                     "reward": reward,
-                    "winner": -1,  # Not terminal.
+                    "winner": -1,  # Not terminal
                     "current_player": current_player_idx
                 })
                 action_id += 1
             except AssertionError as e:
-                traceback.print_exc()
+                #traceback.print_exc()
+                #break
+                pass
 
-        # After game termination, store the log as a CSV file.
+        # After game termination, store the log as a CSV file
         df = pd.DataFrame(log_data, columns=["id", "obs", "action", "reward", "winner", "current_player"])
-        s = "player"
-        csv_filename = os.path.join("games_ep_diff", f"{agent1_name.lower() if agents[0] is not None else s}_{agent2_name.lower() if agents[1] is not None else s}_game_{game_idx}.csv")
+        agent1_name = args.agent1.lower()
+        agent2_name = args.agent2.lower()
+        csv_filename = os.path.join(f"experiments/{args.experiment}", f"{agent1_name}_{agent2_name}_game_{game_idx}.csv")
         df.to_csv(csv_filename, index=False)
         print(f"Game {game_idx} log saved to {csv_filename}")
+    
+    # Run analysis if requested
+    if args.analyze:
+        print(f"Running analysis on experiment {args.experiment}")
+        os.system(f"python analysis/agent_strat_analysis.py experiments/{args.experiment}")
+
+def main():
+    # Configure argument parser
+    parser = argparse.ArgumentParser(description='Mini Catan game runner')
+    parser.add_argument('experiment', type=str, help='Experiment name (for log directory)')
+    parser.add_argument('-m', '--mode', type=str, choices=['human_vs_agent', 'agent_vs_human', 'human_vs_human', 'agent_vs_agent'], 
+                        default='agent_vs_agent', help='Game mode')
+    parser.add_argument('-a1', '--agent1', type=str, default='RandomAgent', help='Agent for player 1 (e.g., "RandomAgent", "DQNAgent")')
+    parser.add_argument('-a2', '--agent2', type=str, default='RandomAgent', help='Agent for player 2 (e.g., "RandomAgent", "DQNAgent")')
+    parser.add_argument('-n', '--num-games', type=int, default=10, help='Number of games to simulate (for agent_vs_agent mode)')
+    parser.add_argument('-r', '--render', action='store_true', help='Render the game')
+    parser.add_argument('-a', '--analyze', action='store_true', help='Run analysis after simulation')
+    
+    args = parser.parse_args()
+    
+    # Run the selected mode
+    if args.mode == 'human_vs_agent':
+        human_vs_agent_mode(args)
+    elif args.mode == 'agent_vs_human':
+        agent_vs_human_mode(args)
+    elif args.mode == 'human_vs_human':
+        human_vs_human_mode(args)
+    elif args.mode == 'agent_vs_agent':
+        agent_vs_agent_mode(args)
+
+if __name__ == "__main__":
+    main()

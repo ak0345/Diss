@@ -2,14 +2,14 @@ import numpy as np
 from mini_catan.enums import Structure, Biome, HexCompEnum
 
 class GreedyAgent:
-    def __init__(self, player_id=None):
+    def __init__(self, player_index=None):
         """
         Initialize the Greedy Agent.
         
         Args:
-            player_id (int, optional): The player ID (0 or 1) of this agent. Defaults to None.
+            player_index (int, optional): The player ID (0 or 1) of this agent. Defaults to None.
         """
-        self.player_id = player_id
+        self.player_index = player_index
         
         # Failure counters to prevent action loops
         self.trade_failures = 0
@@ -676,8 +676,8 @@ class GreedyAgent:
             The selected action.
         """
         # Determine which player we are if not already set
-        if self.player_id is None:
-            self.player_id = game.current_player
+        if self.player_index is None:
+            self.player_index = game.current_player
             
         player_idx = game.current_player
         obs_dict = self.decode_observation(obs, board)

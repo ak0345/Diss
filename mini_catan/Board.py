@@ -7,6 +7,10 @@ from mini_catan.Hex import HexBlock
 from mini_catan.Player import Player
 from mini_catan.Die import Die
 
+import logging
+logging.basicConfig(level=logging.INFO, filename="games.log",filemode="a", format="[%(levelname)s | %(asctime)s | %(lineno)d] %(message)s")
+def print(*args, **kwargs):
+    logging.info(*args)
 
 class Board:
     def __init__(self, player_names):

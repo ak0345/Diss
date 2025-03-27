@@ -18,3 +18,4 @@ register(
 
 # Allow importing MiniCatanEnv directly from the package
 from .CatanEnv import MiniCatanEnv
+from .CatanEnv import print

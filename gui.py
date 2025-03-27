@@ -16,7 +16,7 @@ pygame.init()
 pygame.mixer.init()
 mainClock = pygame.time.Clock()
 
-pygame.mixer.music.load("background_music.mp3")
+pygame.mixer.music.load("gui_assets/background_music.mp3")
 pygame.mixer.music.set_volume(0.5)
 pygame.mixer.music.play(-1)
 
@@ -90,7 +90,7 @@ total_roads = 10
 # Dice Roll
 current_dice = 0
 
-title_image = pygame.image.load("title.png")
+title_image = pygame.image.load("gui_assets/title.png")
 title_image = pygame.transform.scale(title_image, (500, 180))
 TITLE_X = (WINDOW_WIDTH - title_image.get_width()) // 2
 TITLE_Y = 150  # Position above buttons
@@ -359,7 +359,7 @@ class Hex:
         pygame.draw.polygon(screen, BLACK, self.points, 2)  # Outline
 
 # Load and Process GIF
-gif_path = "catan.gif"
+gif_path = "gui_assets/catan.gif"
 gif_image = Image.open(gif_path)
 gif_frames = []
 for frame in range(gif_image.n_frames):
