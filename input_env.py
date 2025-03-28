@@ -225,12 +225,31 @@ def agent_vs_agent_mode(args):
         print(f"Error: Could not create agent2 ({args.agent2}). Exiting.")
         return
     
+    if args.agent1_dqn_model:
+        try:
+            agent1.load_model(args.agent1_dqn_model)
+            agent1.eval()
+            print(f"Model at {args.agent1_dqn_model} loaded successfully")
+        except Exception:
+            print(f"Model not found at {args.agent1_dqn_model}")
+
+    if args.agent2_dqn_model:
+        try:
+            agent2.load_model(args.agent2_dqn_model)
+            agent2.eval()
+            print(f"Model at {args.agent2_dqn_model} loaded successfully")
+        except Exception:
+            print(f"Model not found at {args.agent2_dqn_model}")
+    
     agents = [agent1, agent2]
     print(f"Game mode: Agent vs Agent ({args.agent1} vs {args.agent2})")
     print(f"Running {args.num_games} simulations")
     
     # Create folder for storing logs
     os.makedirs(f"experiments/{args.experiment}", exist_ok=True)
+
+    #import time
+    #time.sleep(5)
     
     # Run simulations
     for game_idx in range(1, args.num_games + 1):
@@ -335,7 +354,9 @@ def main():
     parser.add_argument('-m', '--mode', type=str, choices=['human_vs_agent', 'agent_vs_human', 'human_vs_human', 'agent_vs_agent'], 
                         default='agent_vs_agent', help='Game mode')
     parser.add_argument('-a1', '--agent1', type=str, default='RandomAgent', help='Agent for player 1 (e.g., "RandomAgent", "DQNAgent")')
+    parser.add_argument('-a1dqn', '--agent1-dqn-model', type=str, default=None, help='If DQN for a1, input model path')
     parser.add_argument('-a2', '--agent2', type=str, default='RandomAgent', help='Agent for player 2 (e.g., "RandomAgent", "DQNAgent")')
+    parser.add_argument('-a2dqn', '--agent2-dqn-model', type=str, default=None, help='If DQN for a2, input model path')
     parser.add_argument('-n', '--num-games', type=int, default=10, help='Number of games to simulate (for agent_vs_agent mode)')
     parser.add_argument('-r', '--render', action='store_true', help='Render the game')
     parser.add_argument('-a', '--analyze', action='store_true', help='Run analysis after simulation')
