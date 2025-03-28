@@ -26,8 +26,8 @@ def train_dqn_agent(num_episodes=1000, save_interval=50, log_dir="training_logs"
         opponent_cycle: How often to cycle between different opponents (1=always self-play after start, 2=alternate, 3=self-play, random, greedy)
     """
     # Create directories if they don't exist
-    os.makedirs(f"DQN_Data_a100/{log_dir}", exist_ok=True)
-    os.makedirs(f"DQN_Data_a100/{model_dir}", exist_ok=True)
+    os.makedirs(f"DQN_Data_a100_fixed_reward/{log_dir}", exist_ok=True)
+    os.makedirs(f"DQN_Data_a100_fixed_reward/{model_dir}", exist_ok=True)
     
     # Initialize DQN agent as player 1 (index 0)
     dqn_agent = DQNAgent.DQNAgent(player_index=0)
@@ -70,7 +70,7 @@ def train_dqn_agent(num_episodes=1000, save_interval=50, log_dir="training_logs"
                 target_episode = (target_episode // save_interval) * save_interval
                 
                 # Load a previous version of the model for self-play
-                model_path = os.path.join(f"DQN_Data_a100/{model_dir}", f"dqn_agent_episode_{target_episode}.pt")
+                model_path = os.path.join(f"DQN_Data_a100_fixed_reward/{model_dir}", f"dqn_agent_episode_{target_episode}.pt")
                 
                 if os.path.exists(model_path):
                     # Create a new agent and load the old weights
@@ -132,21 +132,35 @@ def train_dqn_agent(num_episodes=1000, save_interval=50, log_dir="training_logs"
             if done:
                 if env.board.get_vp()[0] >= env.max_victory_points:
                     winner = 0  # DQN agent won
+                    total_reward += 10
                     win_queue.append(1)
+                    if previous_obs is not None:
+                        dqn_agent.learn(current_state, action, total_reward, None, done, action_type)
+
                 elif env.board.get_vp()[1] >= env.max_victory_points:
                     winner = 1  # Opponent won
+                    total_reward -= 10
                     win_queue.append(0)
+                    if previous_obs is not None:
+                        dqn_agent.learn(current_state, action, total_reward, None, done, action_type)
+
                 else:
                     winner = -1  # Draw
+                    total_reward -= 8
                     win_queue.append(0)
+                    if previous_obs is not None:
+                        dqn_agent.learn(current_state, action, total_reward, None, done, action_type)
                 
                 break
             
             # End game if it's too long (stalemate)
             if env.board.turn_number >= 1000:
+                total_reward -= 8
                 done = True
                 winner = -1  # Draw
                 win_queue.append(0)
+                if previous_obs is not None:
+                    dqn_agent.learn(current_state, action, total_reward, None, done, action_type)
                 mini_catan.CatanEnv.print("============================================ Game Concluded ============================================")
                 break
             
@@ -220,7 +234,7 @@ def train_dqn_agent(num_episodes=1000, save_interval=50, log_dir="training_logs"
         
         # Save model at intervals
         if episode % save_interval == 0:
-            model_path = os.path.join(f"DQN_Data_a100/{model_dir}", f"dqn_agent_episode_{episode}.pt")
+            model_path = os.path.join(f"DQN_Data_a100_fixed_reward/{model_dir}", f"dqn_agent_episode_{episode}.pt")
             dqn_agent.save_model(model_path)
             print(f"\nSaved model at episode {episode} to {model_path}")
             
@@ -234,21 +248,21 @@ def train_dqn_agent(num_episodes=1000, save_interval=50, log_dir="training_logs"
             }
             
             metrics_df = pd.DataFrame(metrics)
-            metrics_path = os.path.join(f"DQN_Data_a100/{log_dir}", "training_metrics.csv")
+            metrics_path = os.path.join(f"DQN_Data_a100_fixed_reward/{log_dir}", "training_metrics.csv")
             metrics_df.to_csv(metrics_path, index=False)
             
             # Plot metrics
             plot_metrics(win_history, reward_history, episode_lengths, win_rate_history, 
-                         opponent_types, eval_interval, os.path.join(f"DQN_Data_a100/{log_dir}", f"metrics_episode_{episode}.png"))
+                         opponent_types, eval_interval, os.path.join(f"DQN_Data_a100_fixed_reward/{log_dir}", f"metrics_episode_{episode}.png"))
     
     # Save final model
-    final_model_path = os.path.join(f"DQN_Data_a100/{model_dir}", "dqn_agent_final.pt")
+    final_model_path = os.path.join(f"DQN_Data_a100_fixed_reward/{model_dir}", "dqn_agent_final.pt")
     dqn_agent.save_model(final_model_path)
     print(f"\nSaved final model to {final_model_path}")
     
     # Plot final metrics
     plot_metrics(win_history, reward_history, episode_lengths, win_rate_history, 
-                 opponent_types, eval_interval, os.path.join(f"DQN_Data_a100/{log_dir}", "metrics_final.png"))
+                 opponent_types, eval_interval, os.path.join(f"DQN_Data_a100_fixed_reward/{log_dir}", "metrics_final.png"))
     
     return dqn_agent, win_history, reward_history, episode_lengths
 
@@ -307,17 +321,38 @@ def plot_metrics(win_history, reward_history, episode_lengths, win_rate_history,
     axs[1, 1].set_ylabel("Length")
     axs[1, 1].grid(True)
     
-    # Add markers for self-play transitions
+    # Add cross markers for self-play episodes
     if len(opponent_types) > 0:
         # Find episode indices where self-play was used
         self_play_episodes = [i+1 for i, opp in enumerate(opponent_types) if opp.startswith("self-play")]
         
         if self_play_episodes:
-            # Mark transitions on all plots
-            for ax in axs.flatten():
-                for ep in self_play_episodes:
-                    if ep < len(win_avg):
-                        ax.axvline(x=ep, color='r', linestyle='--', alpha=0.3)
+            # Plot crosses at self-play episodes on win rate graph
+            valid_episodes = [ep for ep in self_play_episodes if ep < len(win_avg)]
+            if valid_episodes:
+                win_values = [win_avg[ep-1] for ep in valid_episodes]
+                axs[0, 0].plot(valid_episodes, win_values, 'rx', markersize=8, label='Self-Play')
+            
+            # Plot crosses on evaluation win rate graph if applicable
+            if len(eval_episodes) == len(win_rate_history):
+                # Find which evaluation periods had self-play
+                eval_self_play = []
+                for i, ep in enumerate(eval_episodes):
+                    # Check if any self-play episodes fall within this eval interval
+                    start_ep = max(0, ep - eval_interval)
+                    if any(start_ep < s_ep <= ep for s_ep in self_play_episodes):
+                        eval_self_play.append(i)
+                
+                if eval_self_play:
+                    eval_x = [eval_episodes[i] for i in eval_self_play]
+                    eval_y = [win_rate_history[i] for i in eval_self_play]
+                    axs[0, 1].plot(eval_x, eval_y, 'rx', markersize=8, label='Self-Play')
+    
+    # Add legends
+    for ax in axs.flatten():
+        handles, labels = ax.get_legend_handles_labels()
+        if handles:
+            ax.legend()
     
     plt.tight_layout()
     plt.savefig(save_path)
@@ -346,7 +381,7 @@ def evaluate_agent(agent, num_episodes=1000, verbose=True):
     
     try:
         # Create a temporary file to save the current model
-        temp_model_path = os.path.join("DQN_Data_a100", "temp_self_play_model.pt")
+        temp_model_path = os.path.join("DQN_Data_a100_fixed_reward", "temp_self_play_model.pt")
         
         # Save the current model state
         agent.save_model(temp_model_path)
