@@ -286,7 +286,7 @@ def plot_metrics(win_history, reward_history, episode_lengths, win_rate_history,
     win_avg = [np.mean(win_history[max(0, i-window_size):i+1]) for i in range(len(win_history))]
     
     # Plot win rate
-    axs[0, 0].plot(win_avg)
+    line1, = axs[0, 0].plot(range(1, len(win_avg)+1), win_avg)
     axs[0, 0].set_title("DQN Agent Win Rate (Running Average)")
     axs[0, 0].set_xlabel("Episode")
     axs[0, 0].set_ylabel("Win Rate")
@@ -295,7 +295,7 @@ def plot_metrics(win_history, reward_history, episode_lengths, win_rate_history,
     # Plot evaluated win rate
     eval_episodes = list(range(eval_interval, len(win_history) + 1, eval_interval))
     if len(eval_episodes) == len(win_rate_history):
-        axs[0, 1].plot(eval_episodes, win_rate_history)
+        line2, = axs[0, 1].plot(eval_episodes, win_rate_history)
         axs[0, 1].set_title("DQN Agent Win Rate (Evaluation)")
         axs[0, 1].set_xlabel("Episode")
         axs[0, 1].set_ylabel("Win Rate")
@@ -305,7 +305,7 @@ def plot_metrics(win_history, reward_history, episode_lengths, win_rate_history,
     window_size = min(100, len(reward_history))
     reward_avg = [np.mean(reward_history[max(0, i-window_size):i+1]) for i in range(len(reward_history))]
     
-    axs[1, 0].plot(reward_avg)
+    line3, = axs[1, 0].plot(range(1, len(reward_avg)+1), reward_avg)
     axs[1, 0].set_title("Average Reward (Running Average)")
     axs[1, 0].set_xlabel("Episode")
     axs[1, 0].set_ylabel("Reward")
@@ -315,7 +315,7 @@ def plot_metrics(win_history, reward_history, episode_lengths, win_rate_history,
     window_size = min(100, len(episode_lengths))
     length_avg = [np.mean(episode_lengths[max(0, i-window_size):i+1]) for i in range(len(episode_lengths))]
     
-    axs[1, 1].plot(length_avg)
+    line4, = axs[1, 1].plot(range(1, len(length_avg)+1), length_avg)
     axs[1, 1].set_title("Average Episode Length (Running Average)")
     axs[1, 1].set_xlabel("Episode")
     axs[1, 1].set_ylabel("Length")
@@ -328,31 +328,28 @@ def plot_metrics(win_history, reward_history, episode_lengths, win_rate_history,
         
         if self_play_episodes:
             # Plot crosses at self-play episodes on win rate graph
-            valid_episodes = [ep for ep in self_play_episodes if ep < len(win_avg)]
-            if valid_episodes:
-                win_values = [win_avg[ep-1] for ep in valid_episodes]
-                axs[0, 0].plot(valid_episodes, win_values, 'rx', markersize=8, label='Self-Play')
+            for ep in self_play_episodes:
+                if 1 <= ep <= len(win_avg):
+                    # Get the exact y-value from the trend line
+                    y_val = win_avg[ep-1]  # -1 because arrays are 0-indexed but episodes start at 1
+                    axs[0, 0].plot(ep, y_val, 'rx', markersize=8)
+            
+            # Add a single entry to the legend
+            axs[0, 0].plot([], [], 'rx', markersize=8, label='Self-Play Episodes')
+            axs[0, 0].legend()
             
             # Plot crosses on evaluation win rate graph if applicable
             if len(eval_episodes) == len(win_rate_history):
                 # Find which evaluation periods had self-play
-                eval_self_play = []
                 for i, ep in enumerate(eval_episodes):
                     # Check if any self-play episodes fall within this eval interval
                     start_ep = max(0, ep - eval_interval)
                     if any(start_ep < s_ep <= ep for s_ep in self_play_episodes):
-                        eval_self_play.append(i)
+                        axs[0, 1].plot(ep, win_rate_history[i], 'rx', markersize=8)
                 
-                if eval_self_play:
-                    eval_x = [eval_episodes[i] for i in eval_self_play]
-                    eval_y = [win_rate_history[i] for i in eval_self_play]
-                    axs[0, 1].plot(eval_x, eval_y, 'rx', markersize=8, label='Self-Play')
-    
-    # Add legends
-    for ax in axs.flatten():
-        handles, labels = ax.get_legend_handles_labels()
-        if handles:
-            ax.legend()
+                # Add to legend
+                axs[0, 1].plot([], [], 'rx', markersize=8, label='Self-Play Episodes')
+                axs[0, 1].legend()
     
     plt.tight_layout()
     plt.savefig(save_path)
