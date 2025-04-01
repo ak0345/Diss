@@ -23,6 +23,7 @@ class Player:
         self.total_trades = 0
         self.second_settlement = None
         self.first_settlement = None
+        self.longest_road_history = []
 
     def get_player_s2r(self):
         count = 0

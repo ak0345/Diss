@@ -342,6 +342,7 @@ class Board:
                                 self.longest_road_owner.inc_vp()
                                 #print(f"{self.longest_road_owner.name} gained a vp")
                                 self.current_longest_road = longest
+                                p.longest_road_history.append(longest)
                                 #print(f"Player {p.name} now has the Longest Road: {longest}")
                     return 0
                 else:

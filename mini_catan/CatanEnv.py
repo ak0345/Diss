@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO, filename="games.log",filemode="a", forma
 def print(*args, **kwargs):
     logging.info(*args)
 
-# Reward variables
+"""# Reward variables
 S_max = 5
 R_max = 10
 n_type = 4
@@ -34,13 +34,172 @@ INVENTORY_BALANCE_REWARD = lambda T_n, R_r: U(T_n + 1 + np.sum(np.abs(R_r - R_av
 TURN_PUNISHMENT = lambda t: 0.2/(1 + np.exp(-0.04*(t-200)))
 LONGEST_ROAD_REWARD = 4
 END_TURN_REWARD = 0.05
-WIN_REWARD = 10
-LOSE_REWARD = -10
+WIN_REWARD = 20
+LOSE_REWARD = -20
 STALEMATE_REWARD = -8
 INITIATE_ROAD_REWARD = 0.8
-INITIATE_SETTLEMENT_REWARD = 0.8
+INITIATE_SETTLEMENT_REWARD = 1
+INITIATE_TRADE_BANK_REWARD = 0.3
+INITIATE_TRADE_PLAYER_REWARD = 0.5
+"""
+
+# Parameters for board-position reward
+centrality_weight = 0.6  # Weight for centrality bonus
+resource_diversity_weight = 0.8  # Weight for resource diversity bonus
+probability_weight = 0.7  # Weight for probability bonus
+
+# Settlement placement reward based on board position
+def SETTLEMENT_POSITION_REWARD(edge_id, biomes, hex_nums):
+    """
+    Calculate reward for settlement placement based on position on the board
+    for a smaller Catan map with 24 vertices and 7 hexes.
+    
+    Args:
+        edge_id: The edge ID where settlement is placed (0-23)
+        biomes: Array of biome types for each hex
+        hex_nums: Array of dice numbers for each hex
+    
+    Returns:
+        Reward value based on position factors
+    """
+    # Define mapping from edge to adjacent hexes based on the smaller map
+    edges_to_hexes = {
+        0: [0], 1: [0, 2], 2: [0, 2, 3], 3: [0, 1, 3], 
+        4: [0, 1], 5: [0], 6: [1, 3, 4], 7: [1, 4],
+        8: [1], 9: [1], 10: [2], 11: [2], 
+        12: [2, 5], 13: [2, 3, 5], 14: [3, 5, 6], 15: [3, 4, 6],
+        16: [4, 6], 17: [4], 18: [4], 19: [5],
+        20: [5], 21: [5, 6], 22: [6], 23: [6]
+    }
+    
+    # Centrality rating - vertices closer to center get higher values
+    # For a smaller map, the most central vertices are those around the middle hex
+    edge_centrality = {
+        # Most central vertices (around middle hex - H4)
+        2: 1.0, 3: 1.0, 6: 1.0, 15: 1.0, 14: 1.0, 13: 1.0,
+        # Secondary central vertices
+        4: 0.8, 1: 0.8, 12: 0.8, 21: 0.8, 16: 0.8, 7: 0.8,
+        # Outer vertices
+        0: 0.5, 5: 0.5, 10: 0.5, 11: 0.5, 19: 0.5, 20: 0.5, 22: 0.5, 23: 0.5, 17: 0.5,
+        18: 0.5, 8: 0.5, 9: 0.5
+    }
+    centrality = edge_centrality.get(edge_id, 0.5)
+    
+    # Resource diversity - vertices touching different resource types get bonus
+    adjacent_hexes = edges_to_hexes.get(edge_id, [])
+    biome_types = set()
+    
+    for hex_id in adjacent_hexes:
+        if hex_id < len(biomes):
+            biome_type = biomes[hex_id]
+            # Skip desert (biome type 0)
+            if biome_type != 0:
+                biome_types.add(biome_type)
+    
+    # More unique resources = higher reward (max 3 different resources)
+    diversity = len(biome_types) / 3  # Normalize to 0-1 range
+    
+    # Probability value - sum of probability values of adjacent hexes
+    # With dice 1-5 (and 6 for desert/robber), probabilities are different
+    probability_sum = 0
+    for hex_id in adjacent_hexes:
+        if hex_id < len(hex_nums):
+            dice_num = hex_nums[hex_id]
+            # Skip desert (marked as 6) or invalid numbers
+            if dice_num == 6:
+                continue
+            # With 1-5 dice, central numbers have highest probability
+            elif dice_num == 3:  # Highest probability
+                probability_sum += 1.0
+            elif dice_num in [2, 4]:  # Medium-high probability
+                probability_sum += 0.8
+            elif dice_num in [1, 5]:  # Lower probability
+                probability_sum += 0.5
+    
+    # Normalize probability (max would be 3 adjacent hexes with highest probability)
+    max_probability = 3.0
+    probability_value = min(probability_sum / max_probability, 1.0)
+    
+    # Add robber penalty - reduce settlement value if adjacent to a desert hex
+    # (which is where the robber starts)
+    robber_penalty = 0
+    for hex_id in adjacent_hexes:
+        if hex_id < len(hex_nums) and hex_nums[hex_id] == 6:
+            robber_penalty = 0.2  # Penalty for being adjacent to initial robber location
+            break
+    
+    # Calculate combined reward with robber penalty
+    position_reward = (
+        centrality_weight * centrality +
+        resource_diversity_weight * diversity +
+        probability_weight * probability_value
+    ) - robber_penalty
+    
+    # Scale to make it comparable to other rewards
+    return 2.5 * position_reward
+
+S_max = 5           # Maximum settlements
+R_max = 10          # Maximum roads
+n_type = 4          # Number of resource types
+alpha = 0.5         # Risk aversion parameter
+beta = 0.7          # New expansion incentive parameter
+gamma = 0.6
+R_avg = lambda R_r: np.sum(R_r) / n_type  # Average resources
+
+# Core gameplay rewards
+ROAD_REWARD = lambda S_2R, S_p: 0.5 * (1 + np.tanh(S_2R / (S_p + 1)))
+SETTLEMENT_REWARD = lambda S_p: 3 * (1 - np.exp(-0.4 * S_p))
+TRADE_BANK_REWARD = lambda d_r: 0.8 * (1 + np.tanh(np.sum(d_r) - 0.5))
+TRADE_PLAYER_REWARD = lambda d_r: 1.2 * (1 + np.tanh(np.sum(d_r) - 0.3))
+
+# Trade negotiation rewards
+REJECTED_TRADE_REWARD = lambda T_R: -0.5 * np.power(T_R, 1.5)
+COUTNER_OFFER_REJECTED_REWARD = lambda T_R: -0.3 * np.power(T_R, 1.2)
+COUTNER_OFFER_ACCEPTED_REWARD = lambda d_r: 2 * np.tanh(np.sum(d_r))
+
+# Strategic rewards
+RESOURCE_DIVERSITY_REWARD = lambda R_r: gamma * (1 - np.std(R_r) / (R_avg(R_r) + 0.1))
+EXPANSION_POTENTIAL_REWARD = lambda S_p, R_p, S_a: beta * (S_p/S_max + R_p/R_max) * S_a
+INVENTORY_BALANCE_REWARD = lambda T_n, R_r: 0.8 * np.exp(-0.4 * np.sum(np.abs(R_r - R_avg(R_r))))
+
+# Time-based rewards
+TURN_PUNISHMENT = lambda t: 0.2/(1 + np.exp(-0.04*(t-200)))
+END_TURN_REWARD = lambda t: 0.1 * np.exp(-0.01 * t)  # Decreases over time to encourage faster play
+
+# Achievement rewards
+def safe_longest_road_reward(L_all):
+    """Calculate longest road reward safely without producing complex numbers."""
+    if len(L_all) == 0:
+        return 3.0  # Default value for empty array
+    
+    max_val = np.max(L_all)
+    # Extract values that aren't equal to the max
+    non_max_vals = L_all[L_all != max_val]
+    
+    # If there are no non-max values (all values are the same)
+    # or if there's only one value in the array
+    if len(non_max_vals) == 0:
+        return 3.0  # Just return the base reward
+    
+    # Otherwise calculate using mean of non-max values
+    mean_non_max = np.mean(non_max_vals)
+    return 3.0 + 0.5 * (max_val - mean_non_max)
+
+# Replace the lambda with this safe function
+LONGEST_ROAD_REWARD = lambda L_all: safe_longest_road_reward(L_all)
+# L_all is longest road history
+#LONGEST_ROAD_REWARD = lambda L_all: 3 + 0.5 * (np.max(L_all) - np.mean(L_all[L_all != np.max(L_all)]))
+
+WIN_REWARD = 200 #30
+LOSE_REWARD = -100 #-20
+STALEMATE_REWARD = -40 #-6
+
+# Action initiation rewards
+INITIATE_ROAD_REWARD = lambda R_p: 0.7 * (1 - R_p/R_max)**0.5
+INITIATE_SETTLEMENT_REWARD = lambda S_p: 1.1 * (1 - S_p/S_max)**0.6
 INITIATE_TRADE_BANK_REWARD = 0.4
-INITIATE_TRADE_PLAYER_REWARD = 0.3
+INITIATE_TRADE_PLAYER_REWARD = 0.6
+
 
 # Pixel positions for render function
 settlement_positions = [
@@ -88,6 +247,21 @@ BIOME_COLOR_MAP = {
     Biome.FIELDS:  "saddlebrown",
     Biome.PASTURE: "limegreen",
 }
+
+def biome_num(b):
+    match b:
+        case Biome.DESERT:
+            return 0
+        case Biome.FOREST:
+            return 1
+        case Biome.HILLS:
+            return 2
+        case Biome.FIELDS:
+            return 3
+        case Biome.PASTURE:
+            return 4
+        case _:
+            return None
 
 class MiniCatanEnv(gym.Env):
     """Custom Gym Environment for Catan."""
@@ -178,22 +352,6 @@ class MiniCatanEnv(gym.Env):
     
     def get_initial_state(self):
         """Define the initial state of the game."""
-        #Get and process Hex Biomes
-        def biome_num(b):
-            match b:
-                case Biome.DESERT:
-                    return 0
-                case Biome.FOREST:
-                    return 1
-                case Biome.HILLS:
-                    return 2
-                case Biome.FIELDS:
-                    return 3
-                case Biome.PASTURE:
-                    return 4
-                case _:
-                    return None
-        
         self.board.make_board()
                 
         state = {
@@ -378,7 +536,7 @@ class MiniCatanEnv(gym.Env):
                 if self.trade_initiator is not None:
                     self.current_player = self.trade_initiator
                     self.trade_initiator = None
-                reward -= END_TURN_REWARD / 2
+                reward -= END_TURN_REWARD(self.board.turn_number) / 2
                 obs = self.decode_observation(self.state)
                 obs["edges"] = np.array(self.board.get_edges())
                 obs["sides"] = np.array(self.board.get_sides())
@@ -420,7 +578,7 @@ class MiniCatanEnv(gym.Env):
                         elif placement == -3: raise AssertionError("Reached Max Structure Limit")
                         
                         print(f"Player {self.current_player + 1} built a settlement at position {action}")
-                        reward += SETTLEMENT_REWARD(len(curr_player.settlements))
+                        reward += SETTLEMENT_REWARD(len(curr_player.settlements)) + SETTLEMENT_POSITION_REWARD(action, [biome_num(b) for b in self.board.get_hex_biomes()], self.board.get_hex_nums())
                         self.waiting_for_settlement_build_followup = False
 
             elif self.waiting_for_b_trade_followup:
@@ -538,12 +696,12 @@ class MiniCatanEnv(gym.Env):
                 if action == 0:  # Build Road
                     print("Player attemtps to build a road.")
                     self.waiting_for_road_build_followup = True
-                    reward += INITIATE_ROAD_REWARD
+                    reward += INITIATE_ROAD_REWARD(len(curr_player.roads))
 
                 elif action == 1:  # Build Settlement
                     print("Player attemtps to build a settlement.")
                     self.waiting_for_settlement_build_followup = True
-                    reward += INITIATE_SETTLEMENT_REWARD
+                    reward += INITIATE_SETTLEMENT_REWARD(len(curr_player.settlements))
 
                 elif action == 2:  # Trade with player
                     print("Player attemtps to initiate a trade with Player.")
@@ -557,15 +715,19 @@ class MiniCatanEnv(gym.Env):
                     reward += INITIATE_TRADE_BANK_REWARD
 
                 elif action == 4:  # End Turn
+                    S_a = len(self.board.all_edges) - (len(self.board.players[self.current_player].settlements) + len(curr_player.settlements))
+                    reward += EXPANSION_POTENTIAL_REWARD(len(curr_player.settlements), len(curr_player.roads), S_a)
+
                     print("Player Ends Turn.")
                     self.current_player = (self.current_player + 1) % self.num_players
+                    reward += END_TURN_REWARD(self.board.turn_number)
                     self.board.turn_number += 1
-                    reward += END_TURN_REWARD
 
                     self.resouce_collection_round()
                     print(f"Dice roll: {self.dice_val}. Resources collected.")
 
                     reward += INVENTORY_BALANCE_REWARD(curr_player.total_trades, np.array(curr_player.inventory)) #inventory balance penalty at end of turn
+                    reward += RESOURCE_DIVERSITY_REWARD(np.array(curr_player.inventory))
 
         else:  # Initial placement phase (turn_number == 0)
             # Implementation of proper snake draft (1-2-2-1)
@@ -652,7 +814,12 @@ class MiniCatanEnv(gym.Env):
             new_owner = self.board.get_longest_road_owner()
             if new_owner > 0:  # 0 means no owner
                 print(f"Player {new_owner} now has the longest road!")
-            reward += LONGEST_ROAD_REWARD
+            
+            if len(curr_player.longest_road_history) > 1:
+                reward += LONGEST_ROAD_REWARD(np.array(curr_player.longest_road_history))
+            else:
+                reward += 3
+                
         self.prev_longest_road_owner = self.board.get_longest_road_owner()
 
         # Check for game end condition
@@ -673,7 +840,7 @@ class MiniCatanEnv(gym.Env):
         # Return the observation, reward, done, and info
         return self.encode_observation(obs), reward, done, trunc, info
 
-    def render(self):
+    def render(self, t):
         fig, ax = plt.subplots(figsize=(10, 8))
         
         # Draw Hexes (tiles)
@@ -744,6 +911,11 @@ class MiniCatanEnv(gym.Env):
         ax.invert_yaxis()
         
         plt.show()
+
+        import time
+        time.sleep(t)
+
+        plt.close()
 
 
     def close(self):

@@ -41,13 +41,13 @@ class DQNAgent:
                  player_trade_action_size=16,
                  player_trade_response_size=3,
                  memory_size=1000000,
-                 batch_size=64,
+                 batch_size=256, #64,
                  gamma=0.99,
                  epsilon_start=1.0,
                  epsilon_end=0.05,
                  epsilon_decay=0.9995,
                  learning_rate=0.0001,
-                 hidden_dims=[256, 128, 64]):
+                 hidden_dims=[128, 64]): #[256, 128, 64]):
         
         self.player_index = player_index
         self.obs_space_size = obs_space_size
@@ -772,19 +772,19 @@ class DQNAgent:
                 padded = np.zeros(expected_size, dtype=np.float32)
                 padded[:state.size] = state
                 state = padded
-                print(f"Padded state from size {state.size} to {expected_size}")
+                #print(f"Padded state from size {state.size} to {expected_size}")
             elif state.size > expected_size:
                 state = state[:expected_size]
-                print(f"Trimmed state from size {state.size + (state.size - expected_size)} to {expected_size}")
+                #print(f"Trimmed state from size {state.size + (state.size - expected_size)} to {expected_size}")
             
             if next_state.size < expected_size:
                 padded = np.zeros(expected_size, dtype=np.float32)
                 padded[:next_state.size] = next_state
                 next_state = padded
-                print(f"Padded next_state from size {next_state.size} to {expected_size}")
+                #print(f"Padded next_state from size {next_state.size} to {expected_size}")
             elif next_state.size > expected_size:
                 next_state = next_state[:expected_size]
-                print(f"Trimmed next_state from size {next_state.size + (next_state.size - expected_size)} to {expected_size}")
+                #print(f"Trimmed next_state from size {next_state.size + (next_state.size - expected_size)} to {expected_size}")
 
             # Use deep copies to prevent reference issues
             state_copy = state.copy()
