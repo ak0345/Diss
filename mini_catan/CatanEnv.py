@@ -840,7 +840,7 @@ class MiniCatanEnv(gym.Env):
         # Return the observation, reward, done, and info
         return self.encode_observation(obs), reward, done, trunc, info
 
-    def render(self, t):
+    def render(self):
         fig, ax = plt.subplots(figsize=(10, 8))
         
         # Draw Hexes (tiles)
@@ -911,12 +911,6 @@ class MiniCatanEnv(gym.Env):
         ax.invert_yaxis()
         
         plt.show()
-
-        import time
-        time.sleep(t)
-
-        plt.close()
-
 
     def close(self):
         """Close any resources used by the environment."""
