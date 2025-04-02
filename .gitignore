@@ -1,5 +1,7 @@
 .*
 !.gitignore
-games*
-experiments
+df*.csv
 metrics*
+!metrics_final.png
+*.pt
+!dqn_agent_final.pt
